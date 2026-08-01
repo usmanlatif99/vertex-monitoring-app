@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V·V TaskLog — MVP Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#182430; --navy-2:#1F3040; --paper:#F5F6F4; --card:#FFFFFF;
+    --ink:#1B2530; --ink-soft:#5A6875; --line:#E2E6E3;
+    --amber:#E8A020; --amber-soft:#FBEFD8;
+    --red:#C23B2E; --red-soft:#FAE6E3;
+    --green:#2E7D4F; --green-soft:#E2F2E8;
+    --blue:#2A6FA8; --blue-soft:#E3EEF7;
+    --grey-soft:#EEF0EE;
+    --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+    --r:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:14.5px;line-height:1.5}
+  button{font-family:var(--sans);cursor:pointer}
+  input,select,textarea{font-family:var(--sans);font-size:14px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);width:100%}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-offset:1px;border-color:var(--amber)}
+  a{color:var(--blue)}
+
+  /* ---------- header ---------- */
+  header{background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:54px;position:sticky;top:0;z-index:50}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand-mark{font-family:var(--mono);font-weight:600;font-size:15px;letter-spacing:.5px;background:var(--amber);color:var(--navy);padding:3px 8px;border-radius:4px}
+  .brand-name{font-weight:600;font-size:15px;letter-spacing:.2px}
+  .brand-sub{font-size:11.5px;color:#9FB0C0;margin-left:2px}
+  .userchip{display:flex;align-items:center;gap:10px;font-size:13px}
+  .userchip .avatar{width:30px;height:30px;border-radius:50%;background:var(--amber);color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12.5px}
+  .userchip .meta{text-align:right;line-height:1.25}
+  .userchip .meta .r{color:#9FB0C0;font-size:11.5px}
+  .switch{background:transparent;border:1px solid #3C4E60;color:#C6D3DF;font-size:12px;padding:5px 10px;border-radius:6px}
+  .switch:hover{border-color:var(--amber);color:#fff}
+
+  /* ---------- layout ---------- */
+  .shell{display:flex;min-height:calc(100vh - 54px)}
+  nav{width:196px;background:var(--navy-2);padding:16px 10px;flex-shrink:0}
+  nav .navlabel{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#7E93A6;padding:6px 10px}
+  nav button{display:block;width:100%;text-align:left;background:none;border:none;color:#C9D6E2;padding:9px 12px;border-radius:6px;font-size:13.5px;margin-bottom:2px}
+  nav button:hover{background:#2A3D50;color:#fff}
+  nav button.active{background:var(--amber);color:var(--navy);font-weight:600}
+  main{flex:1;padding:26px 30px;max-width:1120px}
+  h1{font-size:21px;font-weight:700;letter-spacing:-.2px}
+  h2{font-size:15px;font-weight:600}
+  .sub{color:var(--ink-soft);font-size:13px;margin-top:3px}
+  .pagehead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:20px;gap:16px;flex-wrap:wrap}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+  .grid2{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}nav{width:60px}nav button{font-size:0;padding:9px}nav .navlabel{display:none}main{padding:18px}}
+
+  /* ---------- chips & pills ---------- */
+  .code{font-family:var(--mono);font-size:12px;font-weight:600;background:var(--grey-soft);border:1px solid var(--line);padding:2px 7px;border-radius:4px;white-space:nowrap}
+  .code.vtx{color:#7A4A00;background:var(--amber-soft);border-color:#EED9AE}
+  .code.vsn{color:#1C4E75;background:var(--blue-soft);border-color:#C3DAEC}
+  .pill{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .p-high{background:var(--red-soft);color:var(--red)}
+  .p-medium{background:var(--amber-soft);color:#8A5B00}
+  .p-low{background:var(--grey-soft);color:var(--ink-soft)}
+  .s-in_progress{background:var(--blue-soft);color:var(--blue)}
+  .s-not_started{background:var(--grey-soft);color:var(--ink-soft)}
+  .s-blocked{background:var(--red-soft);color:var(--red)}
+  .s-completed{background:var(--green-soft);color:var(--green)}
+  .due{font-size:12.5px;color:var(--ink-soft);white-space:nowrap}
+  .due.over{color:var(--red);font-weight:600}
+
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-soft);text-align:left;padding:10px 12px;background:#FAFBFA;border-bottom:1px solid var(--line)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr.click:hover{background:#FBF8F0;cursor:pointer}
+
+  /* ---------- buttons ---------- */
+  .btn{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:13.5px;font-weight:600}
+  .btn:hover{background:#233648}
+  .btn-amber{background:var(--amber);color:var(--navy)}
+  .btn-amber:hover{background:#D89417}
+  .btn-ghost{background:none;border:1px solid var(--line);color:var(--ink);font-weight:500}
+  .btn-ghost:hover{border-color:var(--ink-soft)}
+  .btn-sm{padding:5px 11px;font-size:12.5px}
+
+  /* ---------- misc ---------- */
+  .progress{height:6px;background:var(--grey-soft);border-radius:99px;overflow:hidden;min-width:70px}
+  .progress i{display:block;height:100%;background:var(--green);border-radius:99px}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  @media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+  .kpi .n{font-size:26px;font-weight:700;font-family:var(--mono)}
+  .kpi .l{font-size:12px;color:var(--ink-soft);margin-top:2px}
+  .kpi.warn .n{color:var(--red)}
+  .kpi.ok .n{color:var(--green)}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:8px;font-size:13.5px;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transition:.25s;pointer-events:none;z-index:99}
+  .toast.show{opacity:1}
+  .obj{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+  .obj:last-child{border-bottom:none}
+  .obj input{width:16px;height:16px;accent-color:var(--green);flex-shrink:0}
+  .obj.done span{color:var(--ink-soft);text-decoration:line-through}
+  .logentry{padding:12px 0;border-bottom:1px solid var(--line)}
+  .logentry:last-child{border-bottom:none}
+  .logentry .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  .logentry .t{font-size:11.5px;color:var(--ink-soft);font-family:var(--mono)}
+  .fld{margin-bottom:12px}
+  .fld label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;text-transform:uppercase;letter-spacing:.6px}
+  .row{display:flex;gap:12px}
+  .row>*{flex:1}
+  .empty{color:var(--ink-soft);font-size:13px;padding:18px;text-align:center}
+  .name-dot{display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .comp-tabs{display:flex;gap:6px}
+  .comp-tabs button{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 14px;font-size:12.5px}
+  .comp-tabs button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .backlink{background:none;border:none;color:var(--blue);font-size:13px;padding:0;margin-bottom:12px}
+  .comment{padding:10px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  .comment b{font-size:13px}
+  .comment .t{font-size:11.5px;color:var(--ink-soft);font-family:var(--mono);margin-left:6px}
+
+  /* ---------- login ---------- */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--navy);padding:20px}
+  .login-card{background:#fff;border-radius:12px;padding:36px;width:400px;max-width:100%}
+  .login-card .brand-mark{font-size:17px;padding:5px 10px}
+  .login-card h1{margin:18px 0 4px;font-size:20px}
+  .login-card .demo{margin-top:22px;display:flex;flex-direction:column;gap:10px}
+  .login-card .demo button{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:14px;text-align:left}
+  .login-card .demo button:hover{border-color:var(--amber);background:var(--amber-soft)}
+  .login-card .demo .r{font-size:12px;color:var(--ink-soft)}
+  .note{font-size:12px;color:var(--ink-soft);margin-top:18px;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <div class="login-card">
+    <span class="brand-mark">V·V</span>
+    <h1>TaskLog</h1>
+    <div class="sub">Daily task monitoring — Vertex Electronics &amp; Vision Engineering</div>
+    <div class="demo">
+      <button onclick="enter('emp')"><span><b>Ahmed Raza</b><br><span class="r">Employee · Production, Vertex Electronics</span></span><span>→</span></button>
+      <button onclick="enter('mgr')"><span><b>Usman</b><br><span class="r">Admin · Both companies</span></span><span>→</span></button>
+    </div>
+    <div class="note">Prototype: pick a role to preview. Real system uses email + password login.</div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" style="display:none">
+<header>
+  <div class="brand"><span class="brand-mark">V·V</span><span><span class="brand-name">TaskLog</span><span class="brand-sub" id="hdrsub"></span></span></div>
+  <div class="userchip">
+    <div class="meta"><div id="uname"></div><div class="r" id="urole"></div></div>
+    <div class="avatar" id="uav"></div>
+    <button class="switch" onclick="logout()">Switch role</button>
+  </div>
+</header>
+<div class="shell">
+  <nav id="nav"></nav>
+  <main id="main"></main>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =============== DATA =============== */
+const TODAY = '2026-08-02';
+const users = [
+  {id:1,name:'Ahmed Raza',   comp:'VTX',dept:'Production', role:'employee'},
+  {id:2,name:'Sana Tariq',   comp:'VTX',dept:'QA',         role:'employee'},
+  {id:3,name:'Kamran Ali',   comp:'VTX',dept:'Stores',     role:'employee'},
+  {id:4,name:'Hassan Javed', comp:'VTX',dept:'R&D',        role:'employee'},
+  {id:5,name:'Bilal Khan',   comp:'VSN',dept:'Production', role:'employee'},
+  {id:6,name:'Adeel Ahmed',  comp:'VSN',dept:'Site Works', role:'employee'},
+  {id:7,name:'Nadia Hussain',comp:'VSN',dept:'Accounts',   role:'employee'},
+  {id:8,name:'Faisal Mehmood',comp:'VSN',dept:'QA',        role:'employee'},
+  {id:9,name:'Usman',        comp:'ALL',dept:'Management', role:'admin'},
+];
+let seq = {VTX:147, VSN:92};
+let tasks = [
+  {id:1, code:'VTX-0142', title:'Dispatch 500 single-phase meters to LESCO Warehouse-II', comp:'VTX', assignee:1, by:9, pr:'high',  st:'in_progress', due:'2026-08-04',
+   desc:'Complete final packing, gate pass and delivery challan for PO #LES-2231. Coordinate transport for Monday morning delivery.',
+   objs:[{t:'Final QC sign-off on batch',d:true},{t:'Packing & serial list prepared',d:true},{t:'Gate pass + delivery challan issued',d:false},{t:'Transport booked for 4 Aug',d:false}]},
+  {id:2, code:'VTX-0138', title:'AMR firmware v2.3 field validation — 20 pilot meters', comp:'VTX', assignee:4, by:9, pr:'high',  st:'blocked', due:'2026-07-30',
+   desc:'Validate remote-read reliability on GPRS pilot units installed at MEPCO feeder. Blocked: SIM data package renewal pending.',
+   objs:[{t:'Pilot units flashed with v2.3',d:true},{t:'7-day remote read logs collected',d:false},{t:'Validation report submitted',d:false}]},
+  {id:3, code:'VTX-0145', title:'Calibration bench audit for NTDC inspection', comp:'VTX', assignee:2, by:9, pr:'medium',st:'in_progress', due:'2026-08-08',
+   desc:'Prepare calibration certificates and reference-standard records ahead of NTDC visit.',
+   objs:[{t:'Reference standards traceability file updated',d:true},{t:'Bench uncertainty calc reviewed',d:false},{t:'Mock inspection walkthrough',d:false}]},
+  {id:4, code:'VTX-0146', title:'Reconcile component stock — CT coils & LCD modules', comp:'VTX', assignee:3, by:9, pr:'low',   st:'not_started', due:'2026-08-12',
+   desc:'Physical count vs ERP for CT coils and LCD modules; report variances.',
+   objs:[{t:'Physical count completed',d:false},{t:'Variance report submitted',d:false}]},
+  {id:5, code:'VSN-0089', title:'Cast 120 PSC poles — MEPCO order batch 3/5', comp:'VSN', assignee:5, by:9, pr:'high',  st:'in_progress', due:'2026-08-06',
+   desc:'Batch 3 casting and curing schedule for MEPCO PO #MEP-1187. Maintain 28-day strength log.',
+   objs:[{t:'Moulds prepared & rebar cages fixed',d:true},{t:'Casting completed (120/120)',d:false},{t:'Cube test samples logged',d:false}]},
+  {id:6, code:'VSN-0086', title:'Galvanized cross-arm delivery to GEPCO — 800 pcs', comp:'VSN', assignee:6, by:9, pr:'medium',st:'in_progress', due:'2026-07-31',
+   desc:'Arrange delivery + site acknowledgment for GEPCO stores, Gujranwala.',
+   objs:[{t:'Galvanizing QC passed',d:true},{t:'Delivery to GEPCO stores',d:false},{t:'GRN received',d:false}]},
+  {id:7, code:'VSN-0091', title:'Prepare tender documents — IESCO steel structures', comp:'VSN', assignee:7, by:9, pr:'high',  st:'in_progress', due:'2026-08-05',
+   desc:'Compile bid security, technical literature and rate analysis for IESCO tender opening 7 Aug.',
+   objs:[{t:'Rate analysis finalized',d:true},{t:'Bid security arranged',d:false},{t:'Documents bound & dispatched',d:false}]},
+  {id:8, code:'VSN-0090', title:'Cube strength testing — batch 2 poles (28-day)', comp:'VSN', assignee:8, by:9, pr:'medium',st:'completed', due:'2026-08-01',
+   desc:'28-day compressive strength tests for batch 2; file results with QA record.',
+   objs:[{t:'Cubes crushed & recorded',d:true},{t:'Report filed',d:true}]},
+];
+let logs = [
+  {u:2, d:TODAY, task:3, txt:'Updated traceability file for reference standards; started uncertainty review.', hrs:3, st:null, time:'10:40'},
+  {u:5, d:TODAY, task:5, txt:'Fixed rebar cages for 60 moulds; casting starts after lunch shift.', hrs:4, st:null, time:'11:05'},
+  {u:7, d:TODAY, task:7, txt:'Rate analysis finalized with latest steel prices; sent bid security request to bank.', hrs:3.5, st:null, time:'09:50'},
+  {u:8, d:'2026-08-01', task:8, txt:'All cubes crushed, results within spec. Report filed with QA.', hrs:2, st:'completed', time:'16:20'},
+  {u:1, d:'2026-08-01', task:1, txt:'QC sign-off done for full batch; packing 60% complete with serial lists.', hrs:5, st:null, time:'17:02'},
+];
+let comments = [
+  {task:1, u:9, txt:'Transport must reach LESCO before 10am Monday — confirm booking today.', time:'Aug 1, 12:14'},
+  {task:2, u:4, txt:'SIM renewal invoice sent to accounts, waiting for approval.', time:'Jul 29, 15:30'},
+];
+
+/* =============== STATE =============== */
+let me = null, view = 'myday', detailId = null, compFilter = 'ALL';
+const U = id => users.find(u=>u.id===id);
+const fmt = d => { const dt=new Date(d+'T00:00:00'); return dt.toLocaleDateString('en-GB',{day:'numeric',month:'short'}); };
+const overdue = t => t.due && t.due < TODAY && !['completed','cancelled'].includes(t.st);
+const prRank = {high:0,medium:1,low:2};
+const stLbl = {in_progress:'In progress',not_started:'Not started',blocked:'Blocked',completed:'Completed'};
+const prog = t => t.objs.length? Math.round(100*t.objs.filter(o=>o.d).length/t.objs.length) : 0;
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+/* =============== SHELL =============== */
+function enter(role){
+  me = role==='emp'? U(1) : U(9);
+  view = role==='emp'? 'myday' : 'dash';
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('uname').textContent=me.name;
+  document.getElementById('urole').textContent = me.role==='admin'?'Admin · Vertex + Vision':(me.dept+' · '+(me.comp==='VTX'?'Vertex Electronics':'Vision Engineering'));
+  document.getElementById('uav').textContent = me.name.split(' ').map(w=>w[0]).join('').slice(0,2);
+  document.getElementById('hdrsub').textContent = ' · '+TODAY_LONG();
+  render();
+}
+function TODAY_LONG(){return new Date(TODAY+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});}
+function logout(){document.getElementById('app').style.display='none';document.getElementById('login').style.display='flex';}
+function go(v){view=v;detailId=null;render();}
+function openTask(id){detailId=id;view='detail';render();}
+
+function render(){
+  const nav = document.getElementById('nav');
+  const items = me.role==='admin'
+    ? [['dash','Dashboard'],['team','Team tasks'],['assign','Assign task'],['myday','My day']]
+    : [['myday','My day'],['mytasks','My tasks'],['history','My history']];
+  nav.innerHTML = '<div class="navlabel">'+(me.role==='admin'?'Management':'Workspace')+'</div>' +
+    items.map(([v,l])=>`<button class="${view===v?'active':''}" onclick="go('${v}')">${l}</button>`).join('');
+  const m = document.getElementById('main');
+  if(view==='myday') m.innerHTML=vMyDay();
+  else if(view==='mytasks') m.innerHTML=vMyTasks();
+  else if(view==='history') m.innerHTML=vHistory();
+  else if(view==='dash') m.innerHTML=vDash();
+  else if(view==='team') m.innerHTML=vTeam();
+  else if(view==='assign') m.innerHTML=vAssign();
+  else if(view==='detail') m.innerHTML=vDetail();
+}
+
+/* =============== VIEWS =============== */
+function taskChip(t){return `<span class="code ${t.comp.toLowerCase()}">${t.code}</span>`;}
+function prPill(t){return `<span class="pill p-${t.pr}">${t.pr[0].toUpperCase()+t.pr.slice(1)}</span>`;}
+function stPill(t){return `<span class="pill s-${t.st}">${stLbl[t.st]}</span>`;}
+function duePill(t){ if(!t.due) return '<span class="due">—</span>'; return `<span class="due ${overdue(t)?'over':''}">${overdue(t)?'⚠ ':''}${fmt(t.due)}</span>`;}
+
+function vMyDay(){
+  const mine = tasks.filter(t=>t.assignee===me.id && !['completed','cancelled'].includes(t.st))
+                    .sort((a,b)=>prRank[a.pr]-prRank[b.pr]||(a.due||'9').localeCompare(b.due||'9'));
+  const todays = logs.filter(l=>l.u===me.id && l.d===TODAY);
+  const opts = tasks.filter(t=>t.assignee===me.id&&!['completed','cancelled'].includes(t.st))
+        .map(t=>`<option value="${t.id}">${t.code} — ${t.title}</option>`).join('');
+  return `
+  <div class="pagehead"><div><h1>My day</h1><div class="sub">${TODAY_LONG()} · Log the work you've done today</div></div></div>
+  <div class="grid2">
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <h2 style="margin-bottom:12px">Add log entry</h2>
+        <div class="fld"><label>Task</label>
+          <select id="f-task">${opts}<option value="0">Other work (no task)</option></select></div>
+        <div class="fld"><label>What did you do?</label>
+          <textarea id="f-txt" rows="2" placeholder="e.g. Completed gate pass and booked transporter for Monday delivery"></textarea></div>
+        <div class="row">
+          <div class="fld"><label>Hours</label><input id="f-hrs" type="number" step="0.5" min="0" placeholder="2.5"></div>
+          <div class="fld"><label>Task status after</label>
+            <select id="f-st"><option value="">No change</option><option value="in_progress">In progress</option><option value="blocked">Blocked</option><option value="completed">Completed</option></select></div>
+        </div>
+        <button class="btn btn-amber" onclick="addLog()">Add to today's log</button>
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:6px">Today's entries</h2>
+        <div id="todaylist">${todays.length? todays.map(logRow).join('') : '<div class="empty">Nothing logged yet today. Your manager\'s dashboard shows you as pending until you add an entry.</div>'}</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:10px">My pending tasks</h2>
+      ${mine.map(t=>`
+        <div style="padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openTask(${t.id})">
+          <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px">${taskChip(t)} ${prPill(t)}</div>
+          <div style="font-size:13.5px;font-weight:500;margin-bottom:3px">${t.title}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">${duePill(t)}<div class="progress" style="width:70px"><i style="width:${prog(t)}%"></i></div></div>
+        </div>`).join('')||'<div class="empty">No pending tasks</div>'}
+    </div>
+  </div>`;
+}
+function logRow(l){
+  const t = tasks.find(x=>x.id===l.task);
+  return `<div class="logentry">
+    <div class="top">${t?taskChip(t):'<span class="code">AD-HOC</span>'}<span style="font-size:13px;font-weight:500">${t?t.title:'Other work'}</span>${l.st?`<span class="pill s-${l.st}">→ ${stLbl[l.st]}</span>`:''}</div>
+    <div style="font-size:13.5px">${l.txt}</div>
+    <div class="t" style="margin-top:3px">${l.time} · ${l.hrs||0} hrs</div>
+  </div>`;
+}
+function addLog(){
+  const taskId = +document.getElementById('f-task').value;
+  const txt = document.getElementById('f-txt').value.trim();
+  if(!txt){toast('Describe the work first');return;}
+  const st = document.getElementById('f-st').value||null;
+  logs.push({u:me.id,d:TODAY,task:taskId||null,txt,hrs:+document.getElementById('f-hrs').value||null,st,
+             time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})});
+  if(st&&taskId){const t=tasks.find(x=>x.id===taskId);t.st=st;}
+  toast('Entry added to today\'s log');
+  render();
+}
+
+function vMyTasks(){
+  const mine = tasks.filter(t=>t.assignee===me.id).sort((a,b)=>prRank[a.pr]-prRank[b.pr]);
+  return `
+  <div class="pagehead"><div><h1>My tasks</h1><div class="sub">${mine.filter(t=>!['completed','cancelled'].includes(t.st)).length} pending · ${mine.filter(overdue).length} overdue</div></div></div>
+  ${taskTable(mine,false)}`;
+}
+function taskTable(list,showWho){
+  return `<table><thead><tr><th>Task</th><th></th>${showWho?'<th>Assigned to</th>':''}<th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th></tr></thead><tbody>
+  ${list.map(t=>`<tr class="click" onclick="openTask(${t.id})">
+    <td>${taskChip(t)}</td><td style="font-weight:500">${t.title}</td>
+    ${showWho?`<td style="font-size:13px">${U(t.assignee).name}</td>`:''}
+    <td>${prPill(t)}</td><td>${stPill(t)}</td><td>${duePill(t)}</td>
+    <td><div class="progress"><i style="width:${prog(t)}%"></i></div></td></tr>`).join('')||'<tr><td colspan="7" class="empty">No tasks</td></tr>'}
+  </tbody></table>`;
+}
+
+function vHistory(){
+  const days=[...new Set(logs.filter(l=>l.u===me.id).map(l=>l.d))].sort().reverse();
+  return `<div class="pagehead"><div><h1>My history</h1><div class="sub">Past daily logs</div></div></div>`+
+   days.map(d=>`<div class="card" style="margin-bottom:14px"><h2 style="margin-bottom:6px">${new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})}</h2>
+   ${logs.filter(l=>l.u===me.id&&l.d===d).map(logRow).join('')}</div>`).join('')||'<div class="empty">No history yet</div>';
+}
+
+function vDash(){
+  const scope = t => compFilter==='ALL'||t.comp===compFilter;
+  const emps = users.filter(u=>u.role==='employee' && (compFilter==='ALL'||u.comp===compFilter));
+  const loggedIds = new Set(logs.filter(l=>l.d===TODAY).map(l=>l.u));
+  const notLogged = emps.filter(u=>!loggedIds.has(u.id));
+  const od = tasks.filter(t=>scope(t)&&overdue(t));
+  const blocked = tasks.filter(t=>scope(t)&&t.st==='blocked');
+  const week = tasks.filter(t=>scope(t)&&t.due&&t.due>=TODAY&&t.due<='2026-08-09'&&!['completed','cancelled'].includes(t.st));
+  return `
+  <div class="pagehead">
+    <div><h1>Dashboard</h1><div class="sub">${TODAY_LONG()} · Live view across teams</div></div>
+    <div class="comp-tabs">
+      ${['ALL','VTX','VSN'].map(c=>`<button class="${compFilter===c?'active':''}" onclick="compFilter='${c}';render()">${c==='ALL'?'Both companies':c==='VTX'?'Vertex':'Vision'}</button>`).join('')}
+    </div>
+  </div>
+  <div class="kpis">
+    <div class="kpi ok"><div class="n">${emps.length-notLogged.length}/${emps.length}</div><div class="l">Logged work today</div></div>
+    <div class="kpi warn"><div class="n">${od.length}</div><div class="l">Overdue tasks</div></div>
+    <div class="kpi ${blocked.length?'warn':''}"><div class="n">${blocked.length}</div><div class="l">Blocked — needs attention</div></div>
+    <div class="kpi"><div class="n">${week.length}</div><div class="l">Due this week</div></div>
+  </div>
+  <div class="grid2" style="grid-template-columns:300px 1fr">
+    <div class="card">
+      <h2 style="margin-bottom:10px">Not yet logged today</h2>
+      ${notLogged.map(u=>`<div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)"><span class="dot" style="background:${u.comp==='VTX'?'var(--amber)':'var(--blue)'}"></span><div><div style="font-size:13.5px;font-weight:500">${u.name}</div><div style="font-size:12px;color:var(--ink-soft)">${u.dept} · ${u.comp==='VTX'?'Vertex':'Vision'}</div></div></div>`).join('')||'<div class="empty">Everyone has logged ✓</div>'}
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:10px">⚠ Overdue</h2>
+        ${od.length?taskTable(od,true):'<div class="empty">No overdue tasks</div>'}
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:10px">Blocked tasks</h2>
+        ${blocked.length?taskTable(blocked,true):'<div class="empty">Nothing blocked</div>'}
+      </div>
+    </div>
+  </div>`;
+}
+
+function vTeam(){
+  const scope = t => compFilter==='ALL'||t.comp===compFilter;
+  const list = tasks.filter(scope).sort((a,b)=>prRank[a.pr]-prRank[b.pr]);
+  return `
+  <div class="pagehead">
+    <div><h1>Team tasks</h1><div class="sub">All tasks across ${compFilter==='ALL'?'both companies':compFilter==='VTX'?'Vertex Electronics':'Vision Engineering'}</div></div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div class="comp-tabs">${['ALL','VTX','VSN'].map(c=>`<button class="${compFilter===c?'active':''}" onclick="compFilter='${c}';render()">${c==='ALL'?'Both':c==='VTX'?'Vertex':'Vision'}</button>`).join('')}</div>
+      <button class="btn btn-amber btn-sm" onclick="go('assign')">+ Assign task</button>
+    </div>
+  </div>
+  ${taskTable(list,true)}`;
+}
+
+function vAssign(){
+  const emps = users.filter(u=>u.role==='employee');
+  return `
+  <div class="pagehead"><div><h1>Assign task</h1><div class="sub">Create a task and assign it to an employee with deadline &amp; priority</div></div></div>
+  <div class="card" style="max-width:640px">
+    <div class="fld"><label>Task title</label><input id="a-title" placeholder="e.g. Prepare pre-shipment inspection file for LESCO PO #LES-2240"></div>
+    <div class="fld"><label>Description</label><textarea id="a-desc" rows="2" placeholder="What exactly needs to be done, references, PO numbers…"></textarea></div>
+    <div class="row">
+      <div class="fld"><label>Company</label><select id="a-comp" onchange="render_assign_emps()"><option value="VTX">Vertex Electronics</option><option value="VSN">Vision Engineering</option></select></div>
+      <div class="fld"><label>Assign to</label><select id="a-emp">${emps.filter(e=>e.comp==='VTX').map(e=>`<option value="${e.id}">${e.name} — ${e.dept}</option>`).join('')}</select></div>
+    </div>
+    <div class="row">
+      <div class="fld"><label>Priority</label><select id="a-pr"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></div>
+      <div class="fld"><label>Deadline</label><input id="a-due" type="date" value="2026-08-10"></div>
+    </div>
+    <div class="fld"><label>Objectives (one per line, optional)</label><textarea id="a-objs" rows="3" placeholder="Inspection file compiled&#10;Third-party inspector booked&#10;Report shared with LESCO"></textarea></div>
+    <button class="btn btn-amber" onclick="assignTask()">Assign task</button>
+  </div>`;
+}
+function render_assign_emps(){
+  const c=document.getElementById('a-comp').value;
+  document.getElementById('a-emp').innerHTML = users.filter(u=>u.role==='employee'&&u.comp===c).map(e=>`<option value="${e.id}">${e.name} — ${e.dept}</option>`).join('');
+}
+function assignTask(){
+  const title=document.getElementById('a-title').value.trim();
+  if(!title){toast('Give the task a title');return;}
+  const comp=document.getElementById('a-comp').value;
+  seq[comp]++;
+  const t={id:Date.now(),code:comp+'-0'+seq[comp],title,comp,
+    assignee:+document.getElementById('a-emp').value, by:me.id,
+    pr:document.getElementById('a-pr').value, st:'not_started',
+    due:document.getElementById('a-due').value||null,
+    desc:document.getElementById('a-desc').value.trim(),
+    objs:document.getElementById('a-objs').value.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>({t:s,d:false}))};
+  tasks.push(t);
+  toast(`${t.code} assigned to ${U(t.assignee).name} · due ${fmt(t.due)}`);
+  go('team');
+}
+
+function vDetail(){
+  const t = tasks.find(x=>x.id===detailId); if(!t) return '';
+  const hist = logs.filter(l=>l.task===t.id).sort((a,b)=>b.d.localeCompare(a.d));
+  const cmts = comments.filter(c=>c.task===t.id);
+  const canBack = me.role==='admin'?'team':'mytasks';
+  return `
+  <button class="backlink" onclick="go('${canBack}')">← Back to tasks</button>
+  <div class="pagehead"><div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">${taskChip(t)} ${prPill(t)} ${stPill(t)} ${duePill(t)}</div>
+    <h1>${t.title}</h1>
+    <div class="sub">Assigned to <b>${U(t.assignee).name}</b> (${U(t.assignee).dept}) by ${U(t.by).name}</div>
+  </div></div>
+  <div class="grid2">
+    <div>
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:6px">Description</h2>
+        <div style="font-size:13.5px">${t.desc||'—'}</div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <h2 style="margin-bottom:6px">Work log for this task</h2>
+        ${hist.length?hist.map(l=>`<div class="logentry"><div class="top"><b style="font-size:13px">${U(l.u).name}</b><span class="t">${fmt(l.d)} ${l.time}</span>${l.st?`<span class="pill s-${l.st}">→ ${stLbl[l.st]}</span>`:''}</div><div style="font-size:13.5px">${l.txt}</div></div>`).join(''):'<div class="empty">No log entries yet</div>'}
+      </div>
+      <div class="card">
+        <h2 style="margin-bottom:6px">Comments</h2>
+        ${cmts.map(c=>`<div class="comment"><b>${U(c.u).name}</b><span class="t">${c.time}</span><div>${c.txt}</div></div>`).join('')||''}
+        <div style="display:flex;gap:8px;margin-top:10px"><input id="c-txt" placeholder="Write a comment…"><button class="btn btn-sm" onclick="addComment(${t.id})">Post</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2>Objectives</h2><span style="font-family:var(--mono);font-size:13px;font-weight:600">${prog(t)}%</span>
+      </div>
+      <div class="progress" style="margin-bottom:10px"><i style="width:${prog(t)}%"></i></div>
+      ${t.objs.map((o,i)=>`<label class="obj ${o.d?'done':''}"><input type="checkbox" ${o.d?'checked':''} onchange="toggleObj(${t.id},${i})"><span>${o.t}</span></label>`).join('')||'<div class="empty">No objectives defined</div>'}
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+        ${t.st!=='completed'?`<button class="btn btn-sm" onclick="setStatus(${t.id},'completed')">Mark completed</button>`:''}
+        ${t.st!=='blocked'&&t.st!=='completed'?`<button class="btn-ghost btn btn-sm" onclick="setStatus(${t.id},'blocked')">Mark blocked</button>`:''}
+        ${t.st==='blocked'?`<button class="btn-ghost btn btn-sm" onclick="setStatus(${t.id},'in_progress')">Unblock — in progress</button>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+function toggleObj(id,i){const t=tasks.find(x=>x.id===id);t.objs[i].d=!t.objs[i].d;render();}
+function setStatus(id,st){const t=tasks.find(x=>x.id===id);t.st=st;toast(t.code+' → '+stLbl[st]);render();}
+function addComment(id){const el=document.getElementById('c-txt');if(!el.value.trim())return;
+  comments.push({task:id,u:me.id,txt:el.value.trim(),time:'Today'});render();}
+</script>
+</body>
+</html>
