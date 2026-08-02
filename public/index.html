@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V·V TaskLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ── LOGIN ─────────────────────────────────────────────────── -->
+<div id="login">
+  <div class="login-card">
+    <span class="brand-mark">V·V</span>
+    <h1>TaskLog</h1>
+    <div class="sub">Daily task monitoring — Vertex Electronics &amp; Vision Engineering</div>
+    <form id="login-form" onsubmit="doLogin(event)" style="margin-top:22px">
+      <div class="fld">
+        <label>Email address</label>
+        <input id="l-email" type="email" placeholder="your@email.com" autocomplete="email" required>
+      </div>
+      <div class="fld" style="margin-top:12px">
+        <label>Password</label>
+        <input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <div id="l-err" style="color:var(--red);font-size:13px;margin-top:8px;min-height:18px"></div>
+      <button id="l-btn" type="submit" class="btn btn-amber" style="width:100%;margin-top:6px;padding:11px 16px">
+        Sign in
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- ── APP ──────────────────────────────────────────────────── -->
+<div id="app" style="display:none">
+  <header>
+    <div class="brand">
+      <span class="brand-mark">V·V</span>
+      <span>
+        <span class="brand-name">TaskLog</span>
+        <span id="hdr-date" class="brand-sub"></span>
+      </span>
+    </div>
+    <div class="userchip">
+      <div class="meta">
+        <div id="hdr-name"></div>
+        <div class="r" id="hdr-role"></div>
+      </div>
+      <div class="avatar" id="hdr-av"></div>
+      <button class="switch" onclick="doLogout()">Sign out</button>
+    </div>
+  </header>
+  <div class="shell">
+    <nav id="nav"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
