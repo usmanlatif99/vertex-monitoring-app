@@ -108,7 +108,7 @@ function taskTable(tasks, showWho) {
       <td>${prPill(t)}</td>
       <td>${stPill(t)}</td>
       <td>${duePill(t)}</td>
-      <td><div class="progress"><i style="width:${taskPct(t)}%"></i></div></td>
+      <td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:${taskPct(t)}%"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">${taskPct(t)}%</span></div></td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -319,7 +319,7 @@ async function renderMyDay() {
             <div class="task-mini-title">${esc(t.title)}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
               ${duePill(t)}
-              <div class="progress" style="width:70px"><i style="width:${taskPct(t)}%"></i></div>
+              <div style="display:flex;align-items:center;gap:6px"><div class="progress" style="width:60px"><i style="width:${taskPct(t)}%"></i></div><span style="font-size:11px;font-weight:600;color:var(--ink)">${taskPct(t)}%</span></div>
             </div>
           </div>`).join('')
         : '<div class="empty">No pending tasks assigned to you</div>'}
