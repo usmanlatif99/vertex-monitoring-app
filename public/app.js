@@ -1,7 +1,12 @@
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const G = { me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null };
+const G = {
+  me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null,
+  tf: { search: '', status: '', priority: '', assignee: '' },
+  mf: { search: '', status: '', priority: '' },
+  _teamTasks: [], _myTasks: [],
+};
 
 // ── API helper ────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -66,6 +71,107 @@ function userColor(userId) {
     '#4527a0', '#558b2f', '#c07700', '#ad1457',
   ];
   return PALETTE[(userId || 0) % PALETTE.length];
+}
+
+// ── Task filtering ────────────────────────────────────────────────────────────
+function applyTaskFilters(tasks, f) {
+  let out = tasks;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    out = out.filter(t =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.code  || '').toLowerCase().includes(q) ||
+      (t.assignee_name || '').toLowerCase().includes(q)
+    );
+  }
+  if (f.status)   out = out.filter(t => t.status   === f.status);
+  if (f.priority) out = out.filter(t => t.priority  === f.priority);
+  if (f.assignee) out = out.filter(t => String(t.assignee_id) === String(f.assignee));
+  return out;
+}
+
+const SEARCH_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-soft);pointer-events:none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+
+function teamFilterBarHtml(assignees) {
+  const f = G.tf;
+  const hasFilter = f.search || f.status || f.priority || f.assignee;
+  return `
+  <div class="filter-bar">
+    <div class="search-wrap">
+      ${SEARCH_ICON}
+      <input class="search-input" type="text" placeholder="Search by title, code or name…"
+             value="${esc(f.search)}" oninput="G.tf.search=this.value;updateTeamTable()">
+    </div>
+    <select onchange="G.tf.status=this.value;updateTeamTable()">
+      <option value="">All statuses</option>
+      ${['not_started','in_progress','blocked','completed','cancelled'].map(s =>
+        `<option value="${s}" ${f.status===s?'selected':''}>${ST_LABEL[s]||s}</option>`).join('')}
+    </select>
+    <select onchange="G.tf.priority=this.value;updateTeamTable()">
+      <option value="">All priorities</option>
+      ${['high','medium','low'].map(p =>
+        `<option value="${p}" ${f.priority===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join('')}
+    </select>
+    <select onchange="G.tf.assignee=this.value;updateTeamTable()">
+      <option value="">All employees</option>
+      ${assignees.map(a => `<option value="${a.id}" ${String(f.assignee)===String(a.id)?'selected':''}>${esc(a.name)}</option>`).join('')}
+    </select>
+    ${hasFilter ? `<button class="btn btn-ghost btn-sm" onclick="clearTeamFilters()">Clear</button>` : ''}
+  </div>`;
+}
+
+function myFilterBarHtml() {
+  const f = G.mf;
+  const hasFilter = f.search || f.status || f.priority;
+  return `
+  <div class="filter-bar">
+    <div class="search-wrap">
+      ${SEARCH_ICON}
+      <input class="search-input" type="text" placeholder="Search by title or code…"
+             value="${esc(f.search)}" oninput="G.mf.search=this.value;updateMyTable()">
+    </div>
+    <select onchange="G.mf.status=this.value;updateMyTable()">
+      <option value="">All statuses</option>
+      ${['not_started','in_progress','blocked','completed','cancelled'].map(s =>
+        `<option value="${s}" ${f.status===s?'selected':''}>${ST_LABEL[s]||s}</option>`).join('')}
+    </select>
+    <select onchange="G.mf.priority=this.value;updateMyTable()">
+      <option value="">All priorities</option>
+      ${['high','medium','low'].map(p =>
+        `<option value="${p}" ${f.priority===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join('')}
+    </select>
+    ${hasFilter ? `<button class="btn btn-ghost btn-sm" onclick="clearMyFilters()">Clear</button>` : ''}
+  </div>`;
+}
+
+function clearTeamFilters() {
+  G.tf = { search: '', status: '', priority: '', assignee: '' };
+  drawTeamPage();
+}
+
+function clearMyFilters() {
+  G.mf = { search: '', status: '', priority: '' };
+  drawMyPage();
+}
+
+function updateTeamTable() {
+  const el = document.getElementById('team-table');
+  if (!el) return;
+  const filtered = applyTaskFilters(G._teamTasks, G.tf);
+  const hasFilter = G.tf.search || G.tf.status || G.tf.priority || G.tf.assignee;
+  el.innerHTML = (hasFilter
+    ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${G._teamTasks.length} tasks</div>`
+    : '') + taskTable(filtered, true);
+}
+
+function updateMyTable() {
+  const el = document.getElementById('my-table');
+  if (!el) return;
+  const filtered = applyTaskFilters(G._myTasks, G.mf);
+  const hasFilter = G.mf.search || G.mf.status || G.mf.priority;
+  el.innerHTML = (hasFilter
+    ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${G._myTasks.length} tasks</div>`
+    : '') + taskTable(filtered, false);
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
@@ -389,17 +495,25 @@ async function submitLog(e) {
 
 // ── MY TASKS ──────────────────────────────────────────────────────────────────
 async function renderMyTasks() {
-  const main  = document.getElementById('main');
-  const tasks = await api('GET', '/tasks') || [];
-  const od    = tasks.filter(isOverdue).length;
-  const pending = tasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="loading"><div class="spinner"></div>Loading…</div>';
+  G._myTasks = await api('GET', '/tasks') || [];
+  drawMyPage();
+}
+
+function drawMyPage() {
+  const main    = document.getElementById('main');
+  const od      = G._myTasks.filter(isOverdue).length;
+  const pending = G._myTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
 
   main.innerHTML = `
   <div class="pagehead">
     <div><h1>My tasks</h1>
     <div class="sub">${pending} pending · ${od} overdue</div></div>
   </div>
-  ${taskTable(tasks, false)}`;
+  ${myFilterBarHtml()}
+  <div id="my-table"></div>`;
+  updateMyTable();
 }
 
 // ── HISTORY ───────────────────────────────────────────────────────────────────
@@ -513,15 +627,24 @@ async function renderDashboard() {
 
 // ── TEAM TASKS (admin) ────────────────────────────────────────────────────────
 async function renderTeam() {
-  const main  = document.getElementById('main');
-  const cf    = G.compFilter;
-  const tasks = await api('GET', `/tasks${cf !== 'ALL' ? `?company=${cf}` : ''}`) || [];
-  const active = tasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
+  const main = document.getElementById('main');
+  const cf   = G.compFilter;
+  main.innerHTML = '<div class="loading"><div class="spinner"></div>Loading…</div>';
+  G._teamTasks = await api('GET', `/tasks${cf !== 'ALL' ? `?company=${cf}` : ''}`) || [];
+  drawTeamPage();
+}
+
+function drawTeamPage() {
+  const main   = document.getElementById('main');
+  const cf     = G.compFilter;
+  const active = G._teamTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
+  const assignees = [...new Map(G._teamTasks.map(t => [t.assignee_id, { id: t.assignee_id, name: t.assignee_name }])).values()]
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
   main.innerHTML = `
   <div class="pagehead">
     <div><h1>Team tasks</h1>
-    <div class="sub">${tasks.length} total · ${active} active</div></div>
+    <div class="sub">${G._teamTasks.length} total · ${active} active</div></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <div class="comp-tabs">
         ${['ALL', 'VTX', 'VSN'].map(c =>
@@ -532,7 +655,9 @@ async function renderTeam() {
       <button class="btn btn-amber btn-sm" onclick="go('assign')">+ Assign task</button>
     </div>
   </div>
-  ${taskTable(tasks, true)}`;
+  ${teamFilterBarHtml(assignees)}
+  <div id="team-table"></div>`;
+  updateTeamTable();
 }
 
 // ── ASSIGN TASK (admin) ───────────────────────────────────────────────────────
