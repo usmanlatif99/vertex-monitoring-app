@@ -794,9 +794,15 @@ async function renderDetail(id) {
         <h2 style="margin-bottom:14px">Comments & Updates</h2>
         <div id="comments-list">
           ${(() => {
+            const topComments = (comments || []).filter(c => !c.parent_id);
+            const replyMap = {};
+            (comments || []).filter(c => c.parent_id).forEach(c => {
+              (replyMap[c.parent_id] = replyMap[c.parent_id] || []).push(c);
+            });
+
             const timeline = [
               ...(logs || []).map(l => ({ ...l, _type: 'log', _ts: new Date(l.logged_at) })),
-              ...(comments || []).map(c => ({ ...c, _type: 'comment', _ts: new Date(c.created_at) }))
+              ...topComments.map(c => ({ ...c, _type: 'comment', _ts: new Date(c.created_at) }))
             ].sort((a, b) => a._ts - b._ts);
 
             if (!timeline.length) return '<div class="muted small" style="padding:8px 0">No activity yet</div>';
@@ -814,11 +820,7 @@ async function renderDetail(id) {
                   <div style="margin-top:5px;font-size:13.5px">${esc(item.description)}</div>
                 </div>`;
               } else {
-                return `<div class="comment">
-                  <b>${esc(item.user_name || '')}</b>
-                  <span class="t">${fmtDateTime(item.created_at)}</span>
-                  <div style="margin-top:4px">${esc(item.text)}</div>
-                </div>`;
+                return commentHtml(item, replyMap, task.id);
               }
             }).join('');
           })()}
@@ -1094,6 +1096,56 @@ async function submitEditTask(e, id) {
     });
     toast('Task updated ✓', 'success');
     openTask(id);
+  } catch (ex) {
+    toast(ex.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+// ── Threaded comments helpers ─────────────────────────────────────────────────
+function commentHtml(c, replyMap, taskId) {
+  const replies = (replyMap[c.id] || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  return `
+    <div class="comment">
+      <b>${esc(c.user_name || '')}</b>
+      <span class="t">${fmtDateTime(c.created_at)}</span>
+      <div style="margin-top:4px">${esc(c.text)}</div>
+      <button onclick="showReplyBox(${c.id},${taskId})"
+        style="background:none;border:none;color:var(--amber);font-size:11px;cursor:pointer;padding:3px 0;font-weight:600">
+        ↩ Reply
+      </button>
+      <div id="reply-box-${c.id}"></div>
+      ${replies.map(r => `
+        <div class="comment" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
+          <b>${esc(r.user_name || '')}</b>
+          <span class="t">${fmtDateTime(r.created_at)}</span>
+          <div style="margin-top:4px">${esc(r.text)}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function showReplyBox(commentId, taskId) {
+  const box = document.getElementById(`reply-box-${commentId}`);
+  if (!box) return;
+  if (box.innerHTML.trim()) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div style="display:flex;gap:8px;margin-top:8px;margin-left:20px">
+      <input id="ri-${commentId}" placeholder="Write a reply…"
+        style="flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:var(--surface);color:var(--ink)">
+      <button class="btn btn-sm" onclick="submitReply(${taskId},${commentId},'ri-${commentId}')">Post</button>
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('reply-box-${commentId}').innerHTML=''">Cancel</button>
+    </div>`;
+  document.getElementById(`ri-${commentId}`)?.focus();
+}
+
+async function submitReply(taskId, parentId, inputId) {
+  const el = document.getElementById(inputId);
+  if (!el?.value.trim()) return;
+  const btn = el.nextElementSibling;
+  btn.disabled = true;
+  try {
+    await api('POST', '/comments', { task_id: taskId, text: el.value.trim(), parent_id: parentId });
+    renderView();
   } catch (ex) {
     toast(ex.message, 'error');
     btn.disabled = false;

@@ -22,16 +22,16 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.post('/', auth, async (req, res) => {
-  const { task_id, text } = req.body;
+  const { task_id, text, parent_id } = req.body;
   if (!task_id || !text?.trim()) {
     return res.status(400).json({ error: 'task_id and text are required' });
   }
   try {
     const { rows } = await db.query(
-      `INSERT INTO task_comments (task_id, user_id, text)
-       VALUES ($1,$2,$3)
+      `INSERT INTO task_comments (task_id, user_id, text, parent_id)
+       VALUES ($1,$2,$3,$4)
        RETURNING *, (SELECT name FROM users WHERE id=$2) AS user_name`,
-      [task_id, req.user.id, text.trim()]
+      [task_id, req.user.id, text.trim(), parent_id || null]
     );
     res.status(201).json(rows[0]);
   } catch (e) {
