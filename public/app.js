@@ -59,6 +59,15 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function userColor(userId) {
+  const PALETTE = [
+    '#1a6fa8', '#0d7d6b', '#6b4fa8', '#c25c00',
+    '#2e7d32', '#b5174a', '#00838f', '#6d4c41',
+    '#4527a0', '#558b2f', '#c07700', '#ad1457',
+  ];
+  return PALETTE[(userId || 0) % PALETTE.length];
+}
+
 // ── Toast ──────────────────────────────────────────────────────────────────────
 function toast(msg, type = '') {
   const el = document.getElementById('toast');
@@ -865,7 +874,7 @@ async function renderDetail(id) {
                 return `<div class="comment" style="border-left:3px solid var(--green);padding-left:10px">
                   <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
                     <span style="font-size:11px;font-weight:600;color:#fff;background:var(--green);padding:2px 7px;border-radius:4px">Work update</span>
-                    <b style="font-size:13px">${esc(item.user_name || '')}</b>
+                    <b style="font-size:13px;color:${userColor(item.user_id)}">${esc(item.user_name || '')}</b>
                     <span class="t">${fmt(item.log_date)} ${fmtTime(item.logged_at)}</span>
                     ${item.status_after ? `<span class="pill s-${item.status_after}">→ ${ST_LABEL[item.status_after] || item.status_after}</span>` : ''}
                     ${item.hours ? `<span class="muted small">${item.hours}h</span>` : ''}
@@ -1219,7 +1228,7 @@ function startCommentPolling(taskId) {
                 <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
                   <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
                     ${r.user_role === 'employee' ? workUpdateBadge() : ''}
-                    <b>${esc(r.user_name || '')}</b>
+                    <b style="color:${userColor(r.user_id)}">${esc(r.user_name || '')}</b>
                     <span class="t">${fmtDateTime(r.created_at)}</span>
                   </div>
                   <div style="margin-top:4px">${esc(r.text)}</div>
@@ -1246,7 +1255,7 @@ function commentHtml(c, replyMap, taskId) {
     <div class="comment" data-comment-id="${c.id}">
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
         ${isEmp ? workUpdateBadge() : ''}
-        <b>${esc(c.user_name || '')}</b>
+        <b style="color:${userColor(c.user_id)}">${esc(c.user_name || '')}</b>
         <span class="t">${fmtDateTime(c.created_at)}</span>
       </div>
       <div style="margin-top:4px">${esc(c.text)}</div>
@@ -1260,7 +1269,7 @@ function commentHtml(c, replyMap, taskId) {
         <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
           <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
             ${r.user_role === 'employee' ? workUpdateBadge() : ''}
-            <b>${esc(r.user_name || '')}</b>
+            <b style="color:${userColor(r.user_id)}">${esc(r.user_name || '')}</b>
             <span class="t">${fmtDateTime(r.created_at)}</span>
           </div>
           <div style="margin-top:4px">${esc(r.text)}</div>
@@ -1314,7 +1323,7 @@ async function submitReply(taskId, parentId, inputId) {
       <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
           ${r.user_role === 'employee' ? workUpdateBadge() : ''}
-          <b>${esc(r.user_name || '')}</b>
+          <b style="color:${userColor(r.user_id)}">${esc(r.user_name || '')}</b>
           <span class="t">${fmtDateTime(r.created_at)}</span>
         </div>
         <div style="margin-top:4px">${esc(r.text)}</div>
