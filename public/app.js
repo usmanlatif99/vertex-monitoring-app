@@ -1013,7 +1013,7 @@ async function renderDetail(id) {
   const pct          = taskPct(task);
   const backView     = isAdmin ? 'team' : 'mytasks';
   const canAct       = isAdmin || task.assignee_id === G.me.id;
-  const companyUsers = (allUsers || []).filter(u => u.company === task.company && u.active);
+  const companyUsers = (allUsers || []).filter(u => u.active);
 
   main.innerHTML = `
   <button class="backlink" onclick="go('${backView}')">← Back to tasks</button>
