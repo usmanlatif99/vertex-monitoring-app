@@ -210,6 +210,13 @@ function openTask(id) {
   renderView();
 }
 
+function openEditTask(id) {
+  G.editTaskId = id;
+  G.view = 'editTask';
+  renderNav();
+  renderView();
+}
+
 // ── View dispatcher ────────────────────────────────────────────────────────────
 function renderView() {
   const main = document.getElementById('main');
@@ -223,6 +230,7 @@ function renderView() {
     assign:    renderAssign,
     users:     renderUsers,
     detail:    () => renderDetail(G.detailId),
+    editTask:  () => renderEditTask(G.editTaskId),
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -758,6 +766,7 @@ async function renderDetail(id) {
       </div>
     </div>
     ${canAct ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openEditTask(${task.id})">Edit task</button>` : ''}
       ${task.status !== 'completed'
         ? `<button class="btn btn-amber btn-sm" onclick="setStatus(${task.id},'completed')">Mark completed</button>` : ''}
       ${task.status !== 'blocked' && task.status !== 'completed'
@@ -860,6 +869,95 @@ async function submitComment(taskId) {
     await api('POST', '/comments', { task_id: taskId, text: el.value.trim() });
     el.value = '';
     renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+// ── EDIT TASK (admin) ─────────────────────────────────────────────────────────
+async function renderEditTask(id) {
+  const main = document.getElementById('main');
+  const [task, users] = await Promise.all([
+    api('GET', `/tasks/${id}`),
+    api('GET', '/users'),
+  ]);
+  if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
+
+  const emps = (users || []).filter(u => u.role === 'employee' && u.active);
+
+  main.innerHTML = `
+  <button class="backlink" onclick="openTask(${id})">← Back to task</button>
+  <div class="pagehead" style="margin-top:10px">
+    <div><h1>Edit task</h1><div class="sub">${esc(task.code)} · ${esc(task.title)}</div></div>
+  </div>
+  <div class="card" style="max-width:660px">
+    <form id="edit-task-form" onsubmit="submitEditTask(event,${id})">
+      <div class="fld">
+        <label>Task title</label>
+        <input id="et-title" value="${esc(task.title)}" required>
+      </div>
+      <div class="fld">
+        <label>Description</label>
+        <textarea id="et-desc" rows="3">${esc(task.description || '')}</textarea>
+      </div>
+      <div class="row">
+        <div class="fld">
+          <label>Priority</label>
+          <select id="et-pr">
+            <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+            <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Medium</option>
+            <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Deadline</label>
+          <input id="et-due" type="date" value="${task.due_date ? task.due_date.slice(0, 10) : ''}">
+        </div>
+      </div>
+      <div class="row">
+        <div class="fld">
+          <label>Status</label>
+          <select id="et-st">
+            <option value="not_started" ${task.status === 'not_started' ? 'selected' : ''}>Not started</option>
+            <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>In progress</option>
+            <option value="blocked" ${task.status === 'blocked' ? 'selected' : ''}>Blocked</option>
+            <option value="completed" ${task.status === 'completed' ? 'selected' : ''}>Completed</option>
+            <option value="cancelled" ${task.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Assigned to</label>
+          <select id="et-emp">
+            ${emps.map(u =>
+              `<option value="${u.id}" ${u.id === task.assignee_id ? 'selected' : ''}>${esc(u.name)} — ${esc(u.department || '')}</option>`
+            ).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button type="submit" class="btn btn-amber">Save changes</button>
+        <button type="button" class="btn btn-ghost" onclick="openTask(${id})">Cancel</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+async function submitEditTask(e, id) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  try {
+    await api('PUT', `/tasks/${id}`, {
+      title:       document.getElementById('et-title').value.trim(),
+      description: document.getElementById('et-desc').value.trim() || null,
+      priority:    document.getElementById('et-pr').value,
+      due_date:    document.getElementById('et-due').value || null,
+      status:      document.getElementById('et-st').value,
+      assignee_id: +document.getElementById('et-emp').value,
+    });
+    toast('Task updated ✓', 'success');
+    openTask(id);
   } catch (ex) {
     toast(ex.message, 'error');
     btn.disabled = false;
