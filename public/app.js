@@ -852,7 +852,7 @@ async function renderDetail(id) {
         <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${pct === 100 ? 'var(--green)' : 'var(--ink)'}">${pct}%</span>
       </div>
       <div class="progress" style="margin-bottom:14px">
-        <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--amber)'}"></i>
+        <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--accent)'}"></i>
       </div>
       ${(task.objectives || []).length
         ? task.objectives.map(o => `
@@ -1191,7 +1191,7 @@ function commentHtml(c, replyMap, taskId) {
       </div>
       <div style="margin-top:4px">${esc(c.text)}</div>
       <button onclick="showReplyBox(${c.id},${taskId})"
-        style="background:none;border:none;color:var(--amber);font-size:11px;cursor:pointer;padding:3px 0;font-weight:600">
+        style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:3px 0;font-weight:600">
         ↩ Reply
       </button>
       <div id="reply-box-${c.id}"></div>
