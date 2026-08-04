@@ -1,7 +1,7 @@
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-const G = { me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL' };
+const G = { me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null };
 
 // ── API helper ────────────────────────────────────────────────────────────────
 async function api(method, path, body) {
@@ -200,6 +200,7 @@ function renderNav() {
 }
 
 function go(v, params = {}) {
+  stopCommentPolling();
   G.view = v;
   G.detailId = null;
   Object.assign(G, params);
@@ -857,6 +858,8 @@ async function renderDetail(id) {
       </div>
     </div>
   </div>`;
+
+  startCommentPolling(id);
 }
 
 async function toggleObj(taskId, objId, done) {
@@ -1111,6 +1114,55 @@ async function submitEditTask(e, id) {
 }
 
 // ── Threaded comments helpers ─────────────────────────────────────────────────
+function stopCommentPolling() {
+  if (G.commentPoll) { clearInterval(G.commentPoll); G.commentPoll = null; }
+}
+
+function startCommentPolling(taskId) {
+  stopCommentPolling();
+  G.commentPoll = setInterval(async () => {
+    if (G.view !== 'detail' || G.detailId !== taskId) { stopCommentPolling(); return; }
+    const list = document.getElementById('comments-list');
+    if (!list) { stopCommentPolling(); return; }
+    try {
+      const comments = await api('GET', `/comments?task_id=${taskId}`);
+      if (!comments) return;
+      const replyMap = {};
+      comments.filter(c => c.parent_id).forEach(c => {
+        (replyMap[c.parent_id] = replyMap[c.parent_id] || []).push(c);
+      });
+      const empty = list.querySelector('.muted.small');
+      for (const c of comments.filter(c => !c.parent_id)) {
+        const existing = list.querySelector(`[data-comment-id="${c.id}"]`);
+        if (!existing) {
+          if (empty) empty.remove();
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = commentHtml(c, replyMap, taskId);
+          list.appendChild(wrapper.firstElementChild);
+        } else {
+          for (const r of (replyMap[c.id] || [])) {
+            if (!existing.querySelector(`[data-reply-id="${r.id}"]`)) {
+              const replyEl = document.createElement('div');
+              replyEl.innerHTML = `
+                <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
+                    ${r.user_role === 'employee' ? workUpdateBadge() : ''}
+                    <b>${esc(r.user_name || '')}</b>
+                    <span class="t">${fmtDateTime(r.created_at)}</span>
+                  </div>
+                  <div style="margin-top:4px">${esc(r.text)}</div>
+                </div>`;
+              const box = document.getElementById(`reply-box-${c.id}`);
+              if (box) box.insertAdjacentElement('afterend', replyEl.firstElementChild);
+              else existing.appendChild(replyEl.firstElementChild);
+            }
+          }
+        }
+      }
+    } catch (e) { /* ignore transient poll errors */ }
+  }, 5000);
+}
+
 function workUpdateBadge() {
   return `<span style="font-size:11px;font-weight:600;color:#fff;background:var(--green);padding:2px 7px;border-radius:4px">Work update</span>`;
 }
@@ -1119,7 +1171,7 @@ function commentHtml(c, replyMap, taskId) {
   const isEmp = c.user_role === 'employee';
   const replies = (replyMap[c.id] || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   return `
-    <div class="comment">
+    <div class="comment" data-comment-id="${c.id}">
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
         ${isEmp ? workUpdateBadge() : ''}
         <b>${esc(c.user_name || '')}</b>
@@ -1132,7 +1184,7 @@ function commentHtml(c, replyMap, taskId) {
       </button>
       <div id="reply-box-${c.id}"></div>
       ${replies.map(r => `
-        <div class="comment" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
+        <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
           <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
             ${r.user_role === 'employee' ? workUpdateBadge() : ''}
             <b>${esc(r.user_name || '')}</b>
@@ -1168,7 +1220,7 @@ async function submitReply(taskId, parentId, inputId) {
     const box = document.getElementById(`reply-box-${parentId}`);
     const replyEl = document.createElement('div');
     replyEl.innerHTML = `
-      <div class="comment" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
+      <div class="comment" data-reply-id="${r.id}" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
         <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
           ${r.user_role === 'employee' ? workUpdateBadge() : ''}
           <b>${esc(r.user_name || '')}</b>
