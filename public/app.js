@@ -918,7 +918,8 @@ async function submitChangePassword(e) {
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true;
   try {
-    await api('PUT', '/users/me/password', { current_password: cur, new_password: newPw });
+    const result = await api('PUT', '/users/me/password', { current_password: cur, new_password: newPw });
+    if (result === null) return;
     toast('Password updated ✓', 'success');
     e.target.reset();
   } catch (ex) {

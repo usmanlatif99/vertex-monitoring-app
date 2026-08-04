@@ -83,7 +83,7 @@ router.put('/me/password', auth, async (req, res) => {
   try {
     const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
     if (!await bcrypt.compare(current_password, rows[0].password_hash)) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+      return res.status(400).json({ error: 'Current password is incorrect' });
     }
     const hash = await bcrypt.hash(new_password, 10);
     await db.query('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, req.user.id]);
