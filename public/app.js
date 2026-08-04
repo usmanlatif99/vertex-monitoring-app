@@ -181,7 +181,8 @@ function updateHeader() {
 function renderNav() {
   const adminItems = [
     ['dashboard', 'Dashboard'], ['team', 'Team tasks'],
-    ['assign', 'Assign task'], ['users', 'Manage users'], ['myday', 'My day'],
+    ['assign', 'Assign task'], ['dailylogs', 'Daily logs'],
+    ['users', 'Manage users'], ['myday', 'My day'],
     ['password', 'Change password'],
   ];
   const empItems = [
@@ -234,6 +235,7 @@ function renderView() {
     detail:    () => renderDetail(G.detailId),
     editTask:  () => renderEditTask(G.editTaskId),
     password:  renderChangePassword,
+    dailylogs: renderDailyLogs,
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -878,6 +880,78 @@ async function submitComment(taskId) {
     toast(ex.message, 'error');
     btn.disabled = false;
   }
+}
+
+// ── DAILY LOGS (admin) ────────────────────────────────────────────────────────
+async function renderDailyLogs() {
+  const main = document.getElementById('main');
+  const date = G.logsDate || TODAY();
+  G.logsDate = date;
+
+  const [logs, users] = await Promise.all([
+    api('GET', `/logs?date=${date}`),
+    api('GET', '/users'),
+  ]);
+
+  const allEmps = (users || []).filter(u => u.role === 'employee' && u.active);
+  const loggedIds = new Set((logs || []).map(l => l.user_id));
+  const notLogged = allEmps.filter(u => !loggedIds.has(u.id));
+
+  const byUser = {};
+  (logs || []).forEach(l => {
+    if (!byUser[l.user_id]) byUser[l.user_id] = { name: l.user_name, entries: [] };
+    byUser[l.user_id].entries.push(l);
+  });
+
+  main.innerHTML = `
+  <div class="pagehead">
+    <div><h1>Daily logs</h1><div class="sub">View all employee log entries for any date</div></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <input type="date" value="${date}" max="${TODAY()}"
+        onchange="G.logsDate=this.value;renderView()"
+        style="padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:14px;background:var(--surface);color:var(--ink)">
+    </div>
+  </div>
+
+  ${Object.keys(byUser).length === 0 && notLogged.length === 0
+    ? '<div class="card"><div class="empty">No employees found</div></div>'
+    : ''}
+
+  ${Object.values(byUser).map(u => `
+    <div class="card" style="margin-bottom:14px">
+      <h2 style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <div class="avatar-sm">${initials(u.name)}</div>
+        ${esc(u.name)}
+        <span class="pill s-completed" style="font-size:11px">${u.entries.length} entr${u.entries.length === 1 ? 'y' : 'ies'}</span>
+        <span class="muted small" style="font-weight:400">${u.entries.reduce((s, e) => s + (e.hours || 0), 0)}h total</span>
+      </h2>
+      ${u.entries.map(l => `
+        <div class="logentry">
+          <div class="top">
+            ${l.task_code
+              ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>
+                 <span style="font-size:13px;font-weight:500">${esc(l.task_title || '')}</span>`
+              : '<span class="code">AD-HOC</span><span style="font-size:13px;font-weight:500">Other work</span>'}
+            ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
+            ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
+          </div>
+          <div style="font-size:13.5px;margin-top:4px">${esc(l.description)}</div>
+          <div class="t">${fmtTime(l.logged_at)}</div>
+        </div>`).join('')}
+    </div>`).join('')}
+
+  ${notLogged.length ? `
+    <div class="card">
+      <h2 style="margin-bottom:10px">Did not log on this day</h2>
+      ${notLogged.map(u => `
+        <div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)">
+          <span class="dot" style="background:var(--line)"></span>
+          <div>
+            <div style="font-size:13.5px;font-weight:500">${esc(u.name)}</div>
+            <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : 'Vision'}</div>
+          </div>
+        </div>`).join('')}
+    </div>` : ''}`;
 }
 
 // ── CHANGE PASSWORD ───────────────────────────────────────────────────────────
