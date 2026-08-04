@@ -29,12 +29,13 @@ function fmtLong(d) {
 }
 
 function fmtTime(ts) {
-  return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function fmtDateTime(ts) {
-  return new Date(ts).toLocaleDateString('en-GB',
-    { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ', ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function isOverdue(t) {
@@ -1103,12 +1104,20 @@ async function submitEditTask(e, id) {
 }
 
 // ── Threaded comments helpers ─────────────────────────────────────────────────
+function workUpdateBadge() {
+  return `<span style="font-size:11px;font-weight:600;color:#fff;background:var(--green);padding:2px 7px;border-radius:4px">Work update</span>`;
+}
+
 function commentHtml(c, replyMap, taskId) {
+  const isEmp = c.user_role === 'employee';
   const replies = (replyMap[c.id] || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   return `
     <div class="comment">
-      <b>${esc(c.user_name || '')}</b>
-      <span class="t">${fmtDateTime(c.created_at)}</span>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
+        ${isEmp ? workUpdateBadge() : ''}
+        <b>${esc(c.user_name || '')}</b>
+        <span class="t">${fmtDateTime(c.created_at)}</span>
+      </div>
       <div style="margin-top:4px">${esc(c.text)}</div>
       <button onclick="showReplyBox(${c.id},${taskId})"
         style="background:none;border:none;color:var(--amber);font-size:11px;cursor:pointer;padding:3px 0;font-weight:600">
@@ -1117,8 +1126,11 @@ function commentHtml(c, replyMap, taskId) {
       <div id="reply-box-${c.id}"></div>
       ${replies.map(r => `
         <div class="comment" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
-          <b>${esc(r.user_name || '')}</b>
-          <span class="t">${fmtDateTime(r.created_at)}</span>
+          <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
+            ${r.user_role === 'employee' ? workUpdateBadge() : ''}
+            <b>${esc(r.user_name || '')}</b>
+            <span class="t">${fmtDateTime(r.created_at)}</span>
+          </div>
           <div style="margin-top:4px">${esc(r.text)}</div>
         </div>`).join('')}
     </div>`;

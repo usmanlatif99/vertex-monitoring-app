@@ -7,7 +7,7 @@ router.get('/', auth, async (req, res) => {
   if (!task_id) return res.status(400).json({ error: 'task_id required' });
   try {
     const { rows } = await db.query(
-      `SELECT c.*, u.name AS user_name
+      `SELECT c.*, u.name AS user_name, u.role AS user_role
        FROM task_comments c
        JOIN users u ON u.id = c.user_id
        WHERE c.task_id = $1
@@ -30,7 +30,9 @@ router.post('/', auth, async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO task_comments (task_id, user_id, text, parent_id)
        VALUES ($1,$2,$3,$4)
-       RETURNING *, (SELECT name FROM users WHERE id=$2) AS user_name`,
+       RETURNING *,
+         (SELECT name FROM users WHERE id=$2) AS user_name,
+         (SELECT role FROM users WHERE id=$2) AS user_role`,
       [task_id, req.user.id, text.trim(), parent_id || null]
     );
     res.status(201).json(rows[0]);
