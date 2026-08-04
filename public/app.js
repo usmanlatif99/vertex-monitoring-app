@@ -218,7 +218,7 @@ function taskTable(tasks, showWho) {
   return `<div class="table-wrap"><table>
     <thead><tr>
       ${showWho ? `<th style="width:36px;text-align:center"><input type="checkbox" ${allChecked ? 'checked' : ''} title="Select all" onchange="toggleAllCheck(this.checked)"></th>` : ''}
-      <th>Code</th><th>Task</th>
+      <th>Task ID</th><th>Task</th>
       ${showWho ? '<th>Assigned to</th>' : ''}
       <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
     </tr></thead>
