@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db     = require('../db');
 const auth   = require('../middleware/auth');
+const email  = require('../email');
 
 router.get('/', auth, async (req, res) => {
   const { task_id } = req.query;
@@ -51,6 +52,38 @@ router.post('/', auth, async (req, res) => {
       [task_id, req.user.id, text.trim(), parent_id || null]
     );
     res.status(201).json({ ...rows[0], attachments: [] });
+
+    // Fire-and-forget: notify relevant parties about the new comment
+    (async () => {
+      try {
+        const { rows: taskRows } = await db.query(
+          `SELECT t.id, t.code, t.title, t.assignee_id,
+                  u.email AS assignee_email, u.name AS assignee_name
+           FROM tasks t JOIN users u ON u.id = t.assignee_id
+           WHERE t.id = $1`,
+          [task_id]
+        );
+        if (!taskRows[0]) return;
+        const task = taskRows[0];
+        const commenter = req.user;
+        const { rows: admins } = await db.query(
+          "SELECT id, email FROM users WHERE role='admin' AND active=true"
+        );
+
+        let recipientEmails = [];
+        if (commenter.role === 'employee') {
+          // employee comment → notify all admins
+          recipientEmails = admins.filter(a => a.id !== commenter.id).map(a => a.email);
+        } else {
+          // admin comment → notify the task assignee (if not the commenter)
+          if (task.assignee_id !== commenter.id) recipientEmails = [task.assignee_email];
+        }
+
+        if (recipientEmails.length) {
+          await email.newComment(task, commenter.name, rows[0].text, recipientEmails);
+        }
+      } catch (e) { console.error('[email]', e.message); }
+    })();
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

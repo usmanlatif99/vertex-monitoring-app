@@ -39,6 +39,13 @@ services:
       ADMIN_EMAIL:    ${ADMIN_EMAIL:-admin@vv.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@123}
       ADMIN_NAME:     ${ADMIN_NAME:-Admin}
+      SMTP_HOST:      ${SMTP_HOST:-}
+      SMTP_PORT:      ${SMTP_PORT:-587}
+      SMTP_SECURE:    ${SMTP_SECURE:-false}
+      SMTP_USER:      ${SMTP_USER:-}
+      SMTP_PASS:      ${SMTP_PASS:-}
+      SMTP_FROM:      ${SMTP_FROM:-}
+      APP_URL:        ${APP_URL:-https://tasks.vertex.pk}
     restart: unless-stopped
 
   nginx:

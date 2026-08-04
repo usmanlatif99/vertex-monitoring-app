@@ -6,7 +6,9 @@ const rateLimit = require('express-rate-limit');
 const path      = require('path');
 const fs        = require('fs');
 const bcrypt    = require('bcryptjs');
+const cron      = require('node-cron');
 const db        = require('./db');
+const email     = require('./email');
 
 const app = express();
 
@@ -66,6 +68,26 @@ async function initialize() {
     console.log('Change this password immediately after first login!');
   }
 }
+
+// ── Daily overdue digest — 8:00 AM PKT (03:00 UTC) ───────────────────────────
+cron.schedule('0 3 * * *', async () => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const { rows: tasks } = await db.query(
+      `SELECT t.code, t.title, t.due_date, u.name AS assignee_name
+       FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
+       WHERE t.due_date < $1 AND t.status NOT IN ('completed','cancelled')
+       ORDER BY t.due_date ASC`,
+      [today]
+    );
+    const { rows: admins } = await db.query(
+      "SELECT email FROM users WHERE role='admin' AND active=true"
+    );
+    await email.overdueDigest(tasks, admins.map(a => a.email));
+  } catch (e) {
+    console.error('[cron] Overdue digest failed:', e.message);
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 initialize()

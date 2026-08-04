@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const db     = require('../db');
 const auth   = require('../middleware/auth');
+const email  = require('../email');
 
 const TASK_SELECT = `
   SELECT t.*,
@@ -128,6 +129,12 @@ router.post('/', auth, async (req, res) => {
       [taskId]
     );
     res.status(201).json(rows[0]);
+
+    // Fire-and-forget: email the assignee
+    const { rows: assigneeRows } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
+    if (assigneeRows[0]) {
+      email.taskAssigned(rows[0], assigneeRows[0].email).catch(e => console.error('[email]', e.message));
+    }
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);
@@ -143,11 +150,14 @@ router.put('/:id', auth, async (req, res) => {
   const { title, description, priority, due_date, status, assignee_id } = req.body;
 
   try {
+    // Fetch current task state (needed for access check + status-change email)
+    const { rows: cur } = await db.query('SELECT assignee_id, status FROM tasks WHERE id=$1', [req.params.id]);
+    if (!cur[0]) return res.status(404).json({ error: 'Task not found' });
+    const oldStatus = cur[0].status;
+
     if (!isAdmin) {
       // Employees can only change status of their own tasks
-      const { rows } = await db.query('SELECT assignee_id FROM tasks WHERE id=$1', [req.params.id]);
-      if (!rows[0]) return res.status(404).json({ error: 'Task not found' });
-      if (rows[0].assignee_id !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+      if (cur[0].assignee_id !== req.user.id) return res.status(403).json({ error: 'Access denied' });
       if (status) await db.query(
         'UPDATE tasks SET status=$1, updated_at=NOW() WHERE id=$2', [status, req.params.id]
       );
@@ -174,6 +184,19 @@ router.put('/:id', auth, async (req, res) => {
       [req.params.id]
     );
     res.json(rows[0]);
+
+    // Fire-and-forget: notify admins when status changes
+    if (status && status !== oldStatus) {
+      (async () => {
+        try {
+          const { rows: admins } = await db.query(
+            "SELECT email FROM users WHERE role='admin' AND active=true AND id != $1",
+            [req.user.id]
+          );
+          await email.statusChanged(rows[0], oldStatus, status, req.user.name, admins.map(a => a.email));
+        } catch (e) { console.error('[email]', e.message); }
+      })();
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
