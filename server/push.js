@@ -23,7 +23,9 @@ async function deliver(sub, payload) {
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
       JSON.stringify(payload)
     );
+    console.log('[push] sent to user_id:', sub.user_id);
   } catch (e) {
+    console.error('[push] deliver failed — status:', e.statusCode, 'message:', e.message);
     if (e.statusCode === 410 || e.statusCode === 404) {
       await db.query('DELETE FROM push_subscriptions WHERE id=$1', [sub.id]);
     }
