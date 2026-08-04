@@ -276,7 +276,22 @@ async function checkAuth() {
 function initApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display   = 'block';
-  G.view = G.me.role === 'admin' ? 'dashboard' : 'myday';
+
+  const adminViews = ['dashboard','team','assign','dailylogs','users','myday','password','editTask'];
+  const empViews   = ['myday','mytasks','history','password'];
+  const validViews = G.me.role === 'admin' ? adminViews : empViews;
+  const hash       = location.hash.slice(1);
+
+  if (hash.startsWith('detail-')) {
+    const id = parseInt(hash.slice(7), 10);
+    if (id) { G.detailId = id; G.view = 'detail'; }
+    else G.view = G.me.role === 'admin' ? 'dashboard' : 'myday';
+  } else if (validViews.includes(hash)) {
+    G.view = hash;
+  } else {
+    G.view = G.me.role === 'admin' ? 'dashboard' : 'myday';
+  }
+
   updateHeader();
   renderNav();
   renderView();
@@ -386,6 +401,7 @@ function go(v, params = {}) {
   G.view = v;
   G.detailId = null;
   Object.assign(G, params);
+  location.hash = v;
   renderNav();
   renderView();
 }
@@ -393,6 +409,7 @@ function go(v, params = {}) {
 function openTask(id) {
   G.detailId = id;
   G.view = 'detail';
+  location.hash = 'detail-' + id;
   renderNav();
   renderView();
 }
@@ -400,6 +417,7 @@ function openTask(id) {
 function openEditTask(id) {
   G.editTaskId = id;
   G.view = 'editTask';
+  location.hash = 'editTask';
   renderNav();
   renderView();
 }
