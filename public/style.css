@@ -125,12 +125,30 @@ h2   { font-size: 15px; font-weight: 600; }
             margin-bottom: 22px; gap: 16px; flex-wrap: wrap; }
 .grid2    { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
 
+/* ── Hamburger button (hidden on desktop) ─────────────────────────────────── */
+.hamburger { display: none; background: none; border: none; color: #fff;
+             padding: 6px 8px; border-radius: 6px; cursor: pointer; line-height: 1; }
+.hamburger:hover { background: rgba(255,255,255,.1); }
+
+/* ── Nav overlay backdrop (mobile) ───────────────────────────────────────── */
+.nav-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+                z-index: 90; }
+body.nav-open .nav-backdrop { display: block; }
+
 @media (max-width: 900px) {
-  .grid2    { grid-template-columns: 1fr; }
-  nav       { width: 52px; }
-  nav button { font-size: 0; padding: 10px; }
-  nav .navlabel { display: none; }
-  main      { padding: 16px; }
+  .grid2      { grid-template-columns: 1fr; }
+  main        { padding: 16px; }
+  .hamburger  { display: flex; align-items: center; }
+
+  nav {
+    position: fixed; top: 58px; left: 0; bottom: 0;
+    width: 220px; z-index: 95;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    overflow-y: auto;
+    padding: 18px 10px;
+  }
+  body.nav-open nav { transform: translateX(0); }
 }
 
 /* ── Buttons ────────────────────────────────────────────────────────────────── */

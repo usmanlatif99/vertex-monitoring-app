@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VE VE WorkLog</title>
+<title>VE WorkLog</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css">
@@ -44,6 +44,13 @@
 <!-- ── APP ──────────────────────────────────────────────────── -->
 <div id="app" style="display:none">
   <header>
+    <button class="hamburger" onclick="toggleNav()" aria-label="Menu">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect y="4"  width="22" height="2.2" rx="1.1" fill="currentColor"/>
+        <rect y="10" width="22" height="2.2" rx="1.1" fill="currentColor"/>
+        <rect y="16" width="22" height="2.2" rx="1.1" fill="currentColor"/>
+      </svg>
+    </button>
     <div class="brand">
       <svg width="42" height="27" viewBox="0 0 42 27" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
         <rect width="42" height="27" rx="2" fill="#1a8cd8"/>
@@ -74,6 +81,7 @@
   </div>
 </div>
 
+<div class="nav-backdrop" onclick="toggleNav()"></div>
 <div class="toast" id="toast"></div>
 
 <script src="/app.js"></script>

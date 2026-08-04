@@ -199,7 +199,12 @@ function renderNav() {
     ).join('');
 }
 
+function toggleNav() {
+  document.body.classList.toggle('nav-open');
+}
+
 function go(v, params = {}) {
+  document.body.classList.remove('nav-open');
   stopCommentPolling();
   G.view = v;
   G.detailId = null;
