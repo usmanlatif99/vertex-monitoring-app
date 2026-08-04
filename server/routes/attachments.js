@@ -78,6 +78,38 @@ router.post('/task/:taskId', auth, upload.single('file'), async (req, res) => {
   }
 });
 
+// Upload attachment linked to a comment
+router.post('/comment/:commentId', auth, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+  try {
+    const { rows: cr } = await db.query(
+      'SELECT task_id FROM task_comments WHERE id = $1',
+      [req.params.commentId]
+    );
+    if (!cr.length) {
+      fs.unlink(path.join(UPLOAD_DIR, req.file.filename), () => {});
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const { rows } = await db.query(
+      `INSERT INTO task_attachments (task_id, comment_id, uploaded_by, original_name, stored_name, mime_type, file_size)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [cr[0].task_id, req.params.commentId, req.user.id,
+       req.file.originalname, req.file.filename, req.file.mimetype, req.file.size]
+    );
+    const { rows: full } = await db.query(
+      `SELECT a.*, u.name AS uploader_name
+       FROM task_attachments a JOIN users u ON u.id = a.uploaded_by
+       WHERE a.id = $1`,
+      [rows[0].id]
+    );
+    res.status(201).json(full[0]);
+  } catch (e) {
+    fs.unlink(path.join(UPLOAD_DIR, req.file.filename), () => {});
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Download attachment
 router.get('/:id/download', auth, async (req, res) => {
   try {

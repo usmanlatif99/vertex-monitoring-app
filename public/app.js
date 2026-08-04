@@ -758,11 +758,10 @@ async function submitEditUser(e, userId) {
 // ── TASK DETAIL ───────────────────────────────────────────────────────────────
 async function renderDetail(id) {
   const main = document.getElementById('main');
-  const [task, logs, comments, attachments] = await Promise.all([
+  const [task, logs, comments] = await Promise.all([
     api('GET', `/tasks/${id}`),
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
-    api('GET', `/attachments/task/${id}`),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
@@ -840,69 +839,45 @@ async function renderDetail(id) {
             }).join('');
           })()}
         </div>
-        <div style="display:flex;gap:8px;margin-top:12px">
-          <input id="c-txt" placeholder="Write a comment…" style="flex:1">
-          <button class="btn btn-sm" onclick="submitComment(${task.id})">Post</button>
+        <div id="comment-form-wrap" style="margin-top:12px">
+          <input id="c-txt" placeholder="Write a comment…" style="width:100%;margin-bottom:7px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span id="c-file-name">Attach file</span>
+              <input type="file" id="c-file" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="updateFileLabel('c-file','c-file-name')">
+            </label>
+            <button class="btn btn-sm" style="margin-left:auto" onclick="submitComment(${task.id})">Post</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div style="display:flex;flex-direction:column;gap:16px">
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h2>Objectives</h2>
-          <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${pct === 100 ? 'var(--green)' : 'var(--ink)'}">${pct}%</span>
-        </div>
-        <div class="progress" style="margin-bottom:14px">
-          <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--accent)'}"></i>
-        </div>
-        ${(task.objectives || []).length
-          ? task.objectives.map(o => `
-            <label class="obj${o.done ? ' done' : ''}">
-              <input type="checkbox" ${o.done ? 'checked' : ''} ${canAct ? '' : 'disabled'}
-                onchange="toggleObj(${task.id}, ${o.id}, this.checked)">
-              <span>${esc(o.text)}</span>
-            </label>`).join('')
-          : '<div class="empty">No objectives defined</div>'}
-
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
-          <div class="small muted" style="margin-bottom:6px">
-            Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
-          </div>
-        </div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <h2>Objectives</h2>
+        <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${pct === 100 ? 'var(--green)' : 'var(--ink)'}">${pct}%</span>
       </div>
+      <div class="progress" style="margin-bottom:14px">
+        <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--accent)'}"></i>
+      </div>
+      ${(task.objectives || []).length
+        ? task.objectives.map(o => `
+          <label class="obj${o.done ? ' done' : ''}">
+            <input type="checkbox" ${o.done ? 'checked' : ''} ${canAct ? '' : 'disabled'}
+              onchange="toggleObj(${task.id}, ${o.id}, this.checked)">
+            <span>${esc(o.text)}</span>
+          </label>`).join('')
+        : '<div class="empty">No objectives defined</div>'}
 
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-          <h2>Attachments</h2>
-          <span class="muted small">${(attachments||[]).length} file${(attachments||[]).length !== 1 ? 's' : ''}</span>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+        <div class="small muted" style="margin-bottom:6px">
+          Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
         </div>
-        ${(attachments||[]).length ? (attachments||[]).map(a => `
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-            <span class="code" style="font-size:11px;min-width:36px;text-align:center">${fileTypeLabel(a.mime_type)}</span>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.original_name)}">${esc(a.original_name)}</div>
-              <div class="muted small">${esc(a.uploader_name)} · ${fmtDateTime(a.uploaded_at)} · ${fmtSize(a.file_size)}</div>
-            </div>
-            <div style="display:flex;gap:6px;flex-shrink:0">
-              <button class="btn btn-ghost btn-sm" onclick="downloadAttachment(${a.id})">Download</button>
-              ${isAdmin || a.uploaded_by === G.me.id ? `<button class="btn btn-sm" style="background:var(--red);color:#fff;padding:5px 9px" onclick="deleteAttachment(${a.id},${task.id})">×</button>` : ''}
-            </div>
-          </div>`).join('') : '<div class="empty" style="padding:8px 0">No files attached</div>'}
-        ${canAct ? `
-          <div style="margin-top:12px">
-            <label class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Attach file
-              <input type="file" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="uploadAttachment(${task.id},this)">
-            </label>
-            <span class="muted small" style="margin-left:8px;font-size:12px">PDF, Word, Excel, images · max 20 MB</span>
-          </div>` : ''}
       </div>
     </div>
   </div>`;
 
-  window._attachments = attachments || [];
   startCommentPolling(id);
 }
 
@@ -926,13 +901,27 @@ async function setStatus(taskId, status) {
 }
 
 async function submitComment(taskId) {
-  const el  = document.getElementById('c-txt');
-  const btn = el.nextElementSibling;
+  const el        = document.getElementById('c-txt');
+  const fileInput = document.getElementById('c-file');
+  const btn       = document.querySelector('#comment-form-wrap .btn:not(.btn-ghost)');
   if (!el?.value.trim()) return;
   btn.disabled = true;
   try {
     const c = await api('POST', '/comments', { task_id: taskId, text: el.value.trim() });
     if (!c) return;
+    if (fileInput?.files[0]) {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      try {
+        const r = await fetch(`/api/attachments/comment/${c.id}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${G.token}` }, body: fd,
+        });
+        if (r.ok) c.attachments = [await r.json()];
+      } catch (_) {}
+      fileInput.value = '';
+      const lbl = document.getElementById('c-file-name');
+      if (lbl) lbl.textContent = 'Attach file';
+    }
     el.value = '';
     const list = document.getElementById('comments-list');
     const empty = list.querySelector('.muted.small');
@@ -1222,6 +1211,7 @@ function commentHtml(c, replyMap, taskId) {
         <span class="t">${fmtDateTime(c.created_at)}</span>
       </div>
       <div style="margin-top:4px">${esc(c.text)}</div>
+      ${attachmentChips(c.attachments || [])}
       <button onclick="showReplyBox(${c.id},${taskId})"
         style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:3px 0;font-weight:600">
         ↩ Reply
@@ -1244,23 +1234,41 @@ function showReplyBox(commentId, taskId) {
   if (!box) return;
   if (box.innerHTML.trim()) { box.innerHTML = ''; return; }
   box.innerHTML = `
-    <div style="display:flex;gap:8px;margin-top:8px;margin-left:20px">
+    <div style="margin-top:8px;margin-left:20px">
       <input id="ri-${commentId}" placeholder="Write a reply…"
-        style="flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:var(--surface);color:var(--ink)">
-      <button class="btn btn-sm" onclick="submitReply(${taskId},${commentId},'ri-${commentId}')">Post</button>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('reply-box-${commentId}').innerHTML=''">Cancel</button>
+        style="width:100%;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span id="ri-file-name-${commentId}">Attach file</span>
+          <input type="file" id="ri-file-${commentId}" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="updateFileLabel('ri-file-${commentId}','ri-file-name-${commentId}')">
+        </label>
+        <button class="btn btn-sm" style="margin-left:auto" onclick="submitReply(${taskId},${commentId},'ri-${commentId}')">Post</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('reply-box-${commentId}').innerHTML=''">Cancel</button>
+      </div>
     </div>`;
   document.getElementById(`ri-${commentId}`)?.focus();
 }
 
 async function submitReply(taskId, parentId, inputId) {
-  const el = document.getElementById(inputId);
+  const el        = document.getElementById(inputId);
+  const fileInput = document.getElementById(`ri-file-${parentId}`);
   if (!el?.value.trim()) return;
-  const btn = el.nextElementSibling;
+  const btn = el.closest('div').nextElementSibling.querySelector('.btn:not(.btn-ghost)');
   btn.disabled = true;
   try {
     const r = await api('POST', '/comments', { task_id: taskId, text: el.value.trim(), parent_id: parentId });
     if (!r) return;
+    if (fileInput?.files[0]) {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      try {
+        const resp = await fetch(`/api/attachments/comment/${r.id}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${G.token}` }, body: fd,
+        });
+        if (resp.ok) r.attachments = [await resp.json()];
+      } catch (_) {}
+    }
     const box = document.getElementById(`reply-box-${parentId}`);
     const replyEl = document.createElement('div');
     replyEl.innerHTML = `
@@ -1271,6 +1279,7 @@ async function submitReply(taskId, parentId, inputId) {
           <span class="t">${fmtDateTime(r.created_at)}</span>
         </div>
         <div style="margin-top:4px">${esc(r.text)}</div>
+        ${attachmentChips(r.attachments || [])}
       </div>`;
     if (box) {
       box.insertAdjacentElement('afterend', replyEl.firstElementChild);
@@ -1297,6 +1306,24 @@ function fileTypeLabel(mime) {
   if (mime.includes('excel') || mime.includes('spreadsheet')) return 'XLS';
   if (mime.startsWith('image/')) return 'IMG';
   return 'FILE';
+}
+
+function attachmentChips(attachments) {
+  if (!attachments || !attachments.length) return '';
+  return `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">
+    ${attachments.map(a => `
+      <button onclick="downloadAttachment(${a.id})" style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:12px;cursor:pointer;color:var(--ink)">
+        <span style="font-size:10px;font-weight:700;color:var(--accent)">${fileTypeLabel(a.mime_type)}</span>
+        ${esc(a.original_name)}
+        <span class="muted" style="font-size:11px">${fmtSize(a.file_size)}</span>
+      </button>`).join('')}
+  </div>`;
+}
+
+function updateFileLabel(inputId, labelId) {
+  const input = document.getElementById(inputId);
+  const label = document.getElementById(labelId);
+  if (label && input?.files[0]) label.textContent = input.files[0].name;
 }
 
 async function uploadAttachment(taskId, input) {
@@ -1329,14 +1356,15 @@ async function uploadAttachment(taskId, input) {
 }
 
 async function downloadAttachment(id) {
-  const att = (window._attachments || []).find(a => a.id === id);
-  const filename = att ? att.original_name : 'download';
   try {
     const r = await fetch(`/api/attachments/${id}/download`, {
       headers: { 'Authorization': `Bearer ${G.token}` }
     });
     if (!r.ok) throw new Error('Download failed');
     const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : 'download';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

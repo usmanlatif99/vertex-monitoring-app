@@ -63,8 +63,9 @@ CREATE TABLE IF NOT EXISTS task_comments (
 );
 
 -- Columns added after initial deploy
-ALTER TABLE daily_logs    ADD COLUMN IF NOT EXISTS ad_hoc_title VARCHAR(200);
-ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES task_comments(id);
+ALTER TABLE daily_logs       ADD COLUMN IF NOT EXISTS ad_hoc_title VARCHAR(200);
+ALTER TABLE task_comments    ADD COLUMN IF NOT EXISTS parent_id   INTEGER REFERENCES task_comments(id);
+ALTER TABLE task_attachments ADD COLUMN IF NOT EXISTS comment_id  INTEGER REFERENCES task_comments(id) ON DELETE CASCADE;
 
 CREATE TABLE IF NOT EXISTS task_attachments (
   id            SERIAL       PRIMARY KEY,

@@ -6,7 +6,7 @@ router.get('/', auth, async (req, res) => {
   const { task_id } = req.query;
   if (!task_id) return res.status(400).json({ error: 'task_id required' });
   try {
-    const { rows } = await db.query(
+    const { rows: comments } = await db.query(
       `SELECT c.*, u.name AS user_name, u.role AS user_role
        FROM task_comments c
        JOIN users u ON u.id = c.user_id
@@ -14,7 +14,22 @@ router.get('/', auth, async (req, res) => {
        ORDER BY c.created_at ASC`,
       [task_id]
     );
-    res.json(rows);
+
+    if (comments.length) {
+      const ids = comments.map(c => c.id);
+      const { rows: atts } = await db.query(
+        `SELECT a.*, u.name AS uploader_name
+         FROM task_attachments a
+         JOIN users u ON u.id = a.uploaded_by
+         WHERE a.comment_id = ANY($1::int[])`,
+        [ids]
+      );
+      const attMap = {};
+      atts.forEach(a => { (attMap[a.comment_id] = attMap[a.comment_id] || []).push(a); });
+      comments.forEach(c => { c.attachments = attMap[c.id] || []; });
+    }
+
+    res.json(comments);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -35,7 +50,7 @@ router.post('/', auth, async (req, res) => {
          (SELECT role FROM users WHERE id=$2) AS user_role`,
       [task_id, req.user.id, text.trim(), parent_id || null]
     );
-    res.status(201).json(rows[0]);
+    res.status(201).json({ ...rows[0], attachments: [] });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
