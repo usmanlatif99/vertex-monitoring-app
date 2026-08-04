@@ -277,7 +277,7 @@ function initApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display   = 'block';
 
-  const adminViews = ['dashboard','team','assign','dailylogs','users','myday','password','editTask'];
+  const adminViews = ['dashboard','team','assign','dailylogs','users','myday','password','editTask','archived'];
   const empViews   = ['myday','mytasks','history','password'];
   const validViews = G.me.role === 'admin' ? adminViews : empViews;
   const hash       = location.hash.slice(1);
@@ -375,8 +375,8 @@ function renderNav() {
   const adminItems = [
     ['dashboard', 'Dashboard'], ['team', 'Team tasks'],
     ['assign', 'Assign task'], ['dailylogs', 'Daily logs'],
-    ['users', 'Manage users'], ['myday', 'My day'],
-    ['password', 'Change password'],
+    ['users', 'Manage users'], ['archived', 'Archived tasks'],
+    ['myday', 'My day'], ['password', 'Change password'],
   ];
   const empItems = [
     ['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
@@ -438,6 +438,7 @@ function renderView() {
     editTask:  () => renderEditTask(G.editTaskId),
     password:  renderChangePassword,
     dailylogs: renderDailyLogs,
+    archived:  renderArchived,
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -997,20 +998,22 @@ async function submitEditUser(e, userId) {
 
 // ── TASK DETAIL ───────────────────────────────────────────────────────────────
 async function renderDetail(id) {
-  const main = document.getElementById('main');
-  const [task, logs, comments, taskFiles] = await Promise.all([
+  const main    = document.getElementById('main');
+  const isAdmin = G.me.role === 'admin';
+  const [task, logs, comments, taskFiles, allUsers] = await Promise.all([
     api('GET', `/tasks/${id}`),
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
     api('GET', `/attachments/task/${id}`),
+    isAdmin ? api('GET', '/users') : Promise.resolve([]),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
 
-  const pct      = taskPct(task);
-  const backView = G.me.role === 'admin' ? 'team' : 'mytasks';
-  const isAdmin  = G.me.role === 'admin';
-  const canAct   = isAdmin || task.assignee_id === G.me.id;
+  const pct          = taskPct(task);
+  const backView     = isAdmin ? 'team' : 'mytasks';
+  const canAct       = isAdmin || task.assignee_id === G.me.id;
+  const companyUsers = (allUsers || []).filter(u => u.company === task.company && u.active);
 
   main.innerHTML = `
   <button class="backlink" onclick="go('${backView}')">← Back to tasks</button>
@@ -1035,6 +1038,7 @@ async function renderDetail(id) {
         ? `<button class="btn btn-ghost btn-sm" onclick="setStatus(${task.id},'blocked')">Mark blocked</button>` : ''}
       ${task.status === 'blocked'
         ? `<button class="btn btn-ghost btn-sm" onclick="setStatus(${task.id},'in_progress')">Unblock</button>` : ''}
+      ${isAdmin ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="archiveTask(${task.id})">Archive</button>` : ''}
     </div>` : ''}
   </div>
 
@@ -1123,6 +1127,17 @@ async function renderDetail(id) {
           </label>`).join('')
         : '<div class="empty">No objectives defined</div>'}
 
+      ${isAdmin && companyUsers.length > 0 ? `
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+        <div class="small" style="margin-bottom:8px;font-weight:600">Reassign task</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="reassign-sel" style="flex:1;margin:0">
+            ${companyUsers.map(u => `<option value="${u.id}"${u.id === task.assignee_id ? ' selected' : ''}>${esc(u.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm" onclick="reassignTask(${task.id})">Reassign</button>
+        </div>
+      </div>` : ''}
+
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
         <div class="small muted" style="margin-bottom:6px">
           Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
@@ -1151,6 +1166,72 @@ async function setStatus(taskId, status) {
   } catch (ex) {
     toast(ex.message, 'error');
   }
+}
+
+async function archiveTask(taskId) {
+  if (!confirm('Archive this task? It will be hidden from all views but can be restored later.')) return;
+  try {
+    await api('PATCH', `/tasks/${taskId}/archive`);
+    toast('Task archived', 'success');
+    go('team');
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function restoreTask(taskId) {
+  try {
+    await api('PATCH', `/tasks/${taskId}/archive`);
+    toast('Task restored', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function reassignTask(taskId) {
+  const sel = document.getElementById('reassign-sel');
+  if (!sel) return;
+  const assignee_id = parseInt(sel.value, 10);
+  try {
+    await api('PUT', `/tasks/${taskId}`, { assignee_id });
+    toast('Task reassigned', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function renderArchived() {
+  const main  = document.getElementById('main');
+  const tasks = await api('GET', '/tasks?archived=true');
+
+  if (!tasks.length) {
+    main.innerHTML = `
+      <div class="pagehead"><h1>Archived Tasks</h1></div>
+      <div class="empty">No archived tasks</div>`;
+    return;
+  }
+
+  main.innerHTML = `
+    <div class="pagehead"><h1>Archived Tasks</h1></div>
+    <div class="card" style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr>
+          <th>Code</th><th>Title</th><th>Assigned to</th><th>Status</th><th>Archived on</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${tasks.map(t => `<tr>
+            <td><code>${esc(t.code)}</code></td>
+            <td>${esc(t.title)}</td>
+            <td>${esc(t.assignee_name || '—')}</td>
+            <td>${stPill(t)}</td>
+            <td>${fmt(t.updated_at)}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="restoreTask(${t.id})">Restore</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 async function submitComment(taskId) {

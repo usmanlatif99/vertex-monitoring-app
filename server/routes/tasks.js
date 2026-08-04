@@ -20,11 +20,18 @@ const TASK_SELECT = `
 
 // List tasks
 router.get('/', auth, async (req, res) => {
-  const { company, status, assignee_id } = req.query;
+  const { company, status, assignee_id, archived } = req.query;
   const isAdmin = req.user.role === 'admin';
 
   const conds  = [];
   const params = [];
+
+  // Archived filter — admins can view archived tasks; everyone else only sees active
+  if (isAdmin && archived === 'true') {
+    conds.push('t.archived = true');
+  } else {
+    conds.push('t.archived = false');
+  }
 
   if (!isAdmin) {
     params.push(req.user.id);
@@ -206,6 +213,36 @@ router.put('/:id', auth, async (req, res) => {
         } catch (e) { console.error('[notify]', e.message); }
       })();
     }
+
+    // Fire-and-forget: notify new assignee when task is reassigned
+    if (assignee_id && parseInt(assignee_id) !== cur[0].assignee_id) {
+      (async () => {
+        try {
+          const { rows: newAssignee } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
+          if (newAssignee[0]) await email.taskAssigned(rows[0], newAssignee[0].email);
+          await push.toUser(parseInt(assignee_id), {
+            title: 'Task reassigned to you',
+            body:  `${rows[0].code}: ${rows[0].title}`,
+          });
+        } catch (e) { console.error('[notify-reassign]', e.message); }
+      })();
+    }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Archive / restore task (admin only)
+router.patch('/:id/archive', auth, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { rows } = await db.query(
+      'UPDATE tasks SET archived = NOT archived, updated_at=NOW() WHERE id=$1 RETURNING archived',
+      [req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Task not found' });
+    res.json({ archived: rows[0].archived });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
