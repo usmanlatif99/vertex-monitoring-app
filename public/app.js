@@ -1489,7 +1489,7 @@ async function submitReply(taskId, parentId, inputId) {
   const el        = document.getElementById(inputId);
   const fileInput = document.getElementById(`ri-file-${parentId}`);
   if (!el?.value.trim()) return;
-  const btn = el.closest('div').nextElementSibling.querySelector('.btn:not(.btn-ghost)');
+  const btn = el.nextElementSibling.querySelector('.btn:not(.btn-ghost)');
   btn.disabled = true;
   try {
     const r = await api('POST', '/comments', { task_id: taskId, text: el.value.trim(), parent_id: parentId });
