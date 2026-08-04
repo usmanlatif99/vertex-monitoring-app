@@ -272,10 +272,14 @@ async function renderMyDay() {
         <form id="log-form" onsubmit="submitLog(event)">
           <div class="fld">
             <label>Task</label>
-            <select id="f-task">
+            <select id="f-task" onchange="toggleAdhocTitle()">
               <option value="">No specific task (ad-hoc work)</option>
               ${opts}
             </select>
+          </div>
+          <div class="fld" id="f-adhoc-wrap">
+            <label>Task name</label>
+            <input id="f-adhoc-title" placeholder="e.g. Prepare quotation for SNGPL…">
           </div>
           <div class="fld">
             <label>What did you do?</label>
@@ -334,7 +338,7 @@ function logRow(l) {
       ${l.task_code
         ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>`
         : '<span class="code">AD-HOC</span>'}
-      <span style="font-size:13px;font-weight:500">${esc(l.task_title || 'Other work')}</span>
+      <span style="font-size:13px;font-weight:500">${esc(l.task_title || l.ad_hoc_title || 'Other work')}</span>
       ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
       ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
     </div>
@@ -343,16 +347,24 @@ function logRow(l) {
   </div>`;
 }
 
+function toggleAdhocTitle() {
+  const taskSel = document.getElementById('f-task');
+  const wrap    = document.getElementById('f-adhoc-wrap');
+  if (!wrap) return;
+  wrap.style.display = taskSel?.value ? 'none' : '';
+}
+
 async function submitLog(e) {
   e.preventDefault();
-  const task_id     = document.getElementById('f-task').value || null;
-  const description = document.getElementById('f-txt').value.trim();
-  const hours       = parseFloat(document.getElementById('f-hrs').value) || null;
+  const task_id      = document.getElementById('f-task').value || null;
+  const description  = document.getElementById('f-txt').value.trim();
+  const hours        = parseFloat(document.getElementById('f-hrs').value) || null;
   const status_after = document.getElementById('f-st').value || null;
+  const ad_hoc_title = !task_id ? (document.getElementById('f-adhoc-title')?.value.trim() || null) : null;
   const btn = e.target.querySelector('button[type=submit]');
   btn.disabled = true;
   try {
-    await api('POST', '/logs', { task_id: task_id ? +task_id : null, description, hours, status_after });
+    await api('POST', '/logs', { task_id: task_id ? +task_id : null, description, hours, status_after, ad_hoc_title });
     toast('Entry added ✓', 'success');
     renderView();
   } catch (ex) {
@@ -952,7 +964,7 @@ async function renderDailyLogs() {
             ${l.task_code
               ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>
                  <span style="font-size:13px;font-weight:500">${esc(l.task_title || '')}</span>`
-              : '<span class="code">AD-HOC</span><span style="font-size:13px;font-weight:500">Other work</span>'}
+              : `<span class="code">AD-HOC</span><span style="font-size:13px;font-weight:500">${esc(l.ad_hoc_title || 'Other work')}</span>`}
             ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
             ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
           </div>

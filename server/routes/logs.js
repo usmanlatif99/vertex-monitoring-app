@@ -55,7 +55,7 @@ router.get('/', auth, async (req, res) => {
 
 // Add log entry
 router.post('/', auth, async (req, res) => {
-  const { task_id, description, hours, status_after, log_date } = req.body;
+  const { task_id, description, hours, status_after, log_date, ad_hoc_title } = req.body;
   if (!description?.trim()) return res.status(400).json({ error: 'Description is required' });
 
   try {
@@ -71,10 +71,11 @@ router.post('/', auth, async (req, res) => {
 
     const today = new Date().toISOString().slice(0, 10);
     const { rows } = await db.query(
-      `INSERT INTO daily_logs (user_id, task_id, log_date, description, hours, status_after)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      `INSERT INTO daily_logs (user_id, task_id, log_date, description, hours, status_after, ad_hoc_title)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
       [req.user.id, task_id || null, log_date || today,
-       description.trim(), hours || null, status_after || null]
+       description.trim(), hours || null, status_after || null,
+       (!task_id && ad_hoc_title?.trim()) ? ad_hoc_title.trim() : null]
     );
 
     const { rows: full } = await db.query(
