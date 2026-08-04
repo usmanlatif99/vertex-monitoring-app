@@ -578,6 +578,17 @@ async function renderAssign() {
         <label>Objectives — one per line (optional)</label>
         <textarea id="a-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed"></textarea>
       </div>
+      <div class="fld">
+        <label>Attach file (optional)</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="assign-file-name">Choose file</span>
+            <input type="file" id="assign-file" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="updateFileLabel('assign-file','assign-file-name')">
+          </label>
+          <span class="muted small">PDF, Word, Excel, images · max 20 MB</span>
+        </div>
+      </div>
       <button type="submit" class="btn btn-amber">Assign task</button>
       <button type="button" class="btn btn-ghost" style="margin-left:8px" onclick="go('team')">Cancel</button>
     </form>
@@ -606,6 +617,16 @@ async function submitAssign(e) {
       due_date:    document.getElementById('a-due').value,
       objectives,
     });
+    const fileInput = document.getElementById('assign-file');
+    if (fileInput?.files[0] && task?.id) {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      try {
+        await fetch(`/api/attachments/task/${task.id}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${G.token}` }, body: fd,
+        });
+      } catch (_) {}
+    }
     toast(`${task.code} assigned to ${task.assignee_name}`, 'success');
     go('team');
   } catch (ex) {
@@ -758,10 +779,11 @@ async function submitEditUser(e, userId) {
 // ── TASK DETAIL ───────────────────────────────────────────────────────────────
 async function renderDetail(id) {
   const main = document.getElementById('main');
-  const [task, logs, comments] = await Promise.all([
+  const [task, logs, comments, taskFiles] = await Promise.all([
     api('GET', `/tasks/${id}`),
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
+    api('GET', `/attachments/task/${id}`),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
@@ -806,6 +828,18 @@ async function renderDetail(id) {
 
       <div class="card">
         <h2 style="margin-bottom:14px">Comments & Updates</h2>
+        ${(taskFiles||[]).length ? `
+          <div style="padding:8px 10px;background:var(--grey-s);border-radius:6px;margin-bottom:14px">
+            <div class="small muted" style="margin-bottom:6px;font-weight:600">Task files</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px">
+              ${(taskFiles||[]).map(a => `
+                <button onclick="downloadAttachment(${a.id})" style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:12px;cursor:pointer;color:var(--ink)">
+                  <span style="font-size:10px;font-weight:700;color:var(--accent)">${fileTypeLabel(a.mime_type)}</span>
+                  ${esc(a.original_name)}
+                  <span class="muted" style="font-size:11px">${fmtSize(a.file_size)}</span>
+                </button>`).join('')}
+            </div>
+          </div>` : ''}
         <div id="comments-list">
           ${(() => {
             const topComments = (comments || []).filter(c => !c.parent_id);

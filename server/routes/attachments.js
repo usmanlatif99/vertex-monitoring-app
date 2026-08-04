@@ -43,7 +43,7 @@ router.get('/task/:taskId', auth, async (req, res) => {
       `SELECT a.*, u.name AS uploader_name
        FROM task_attachments a
        JOIN users u ON u.id = a.uploaded_by
-       WHERE a.task_id = $1
+       WHERE a.task_id = $1 AND a.comment_id IS NULL
        ORDER BY a.uploaded_at DESC`,
       [req.params.taskId]
     );
