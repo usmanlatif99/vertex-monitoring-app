@@ -120,6 +120,17 @@ module.exports = {
     }
   },
 
+  async passwordReset(user, resetUrl) {
+    const html = shell(`
+      <h2 style="margin:0 0 6px;color:#1a2332;font-size:17px">Reset Your Password</h2>
+      <p style="color:#6b7a90;margin:0 0 14px">Hi <strong style="color:#1a2332">${user.name}</strong>, you requested a password reset for your VE WorkLog account.</p>
+      <p style="color:#6b7a90;margin:0 0 18px">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+      <a href="${resetUrl}" style="display:inline-block;background:#1a8cd8;color:#fff;padding:10px 22px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Reset Password →</a>
+      <p style="color:#aab5c5;font-size:12px;margin-top:20px">If you didn't request this, you can safely ignore this email.</p>
+    `);
+    await send(user.email, 'Reset your VE WorkLog password', html);
+  },
+
   async overdueDigest(overdueTasks, adminEmails) {
     if (!overdueTasks.length || !adminEmails.length) return;
     const rows = overdueTasks.map(t =>

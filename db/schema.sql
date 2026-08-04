@@ -68,6 +68,15 @@ ALTER TABLE task_comments    ADD COLUMN IF NOT EXISTS parent_id   INTEGER REFERE
 ALTER TABLE task_attachments ADD COLUMN IF NOT EXISTS comment_id  INTEGER REFERENCES task_comments(id) ON DELETE CASCADE;
 ALTER TABLE tasks            ADD COLUMN IF NOT EXISTS archived    BOOLEAN NOT NULL DEFAULT false;
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         SERIAL      PRIMARY KEY,
+  user_id    INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      VARCHAR(64) NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used       BOOLEAN     NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS task_attachments (
   id            SERIAL       PRIMARY KEY,
   task_id       INTEGER      NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,

@@ -273,6 +273,10 @@ function doLogout() {
 }
 
 async function checkAuth() {
+  if (location.hash.startsWith('#reset-')) {
+    showResetForm(location.hash.slice(7));
+    return;
+  }
   const saved = localStorage.getItem('vv_token');
   if (!saved) return;
   G.token = saved;
@@ -282,6 +286,74 @@ async function checkAuth() {
   } catch {
     G.token = null;
     localStorage.removeItem('vv_token');
+  }
+}
+
+function showForgotForm() {
+  document.querySelector('.login-card').innerHTML = `
+    <h1 style="font-size:20px;margin-bottom:6px">Forgot password</h1>
+    <div class="sub" style="margin-bottom:24px">Enter your email and we'll send you a reset link</div>
+    <div class="fld">
+      <label>Email address</label>
+      <input id="fp-email" type="email" placeholder="your@email.com" autocomplete="email">
+    </div>
+    <div id="fp-msg" style="font-size:13px;margin-top:8px;min-height:18px"></div>
+    <button class="btn btn-amber" style="width:100%;margin-top:6px;padding:12px 16px;font-size:14px" onclick="submitForgotPassword()">Send reset link</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="location.reload()">Back to sign in</button>
+  `;
+  document.getElementById('fp-email').focus();
+}
+
+async function submitForgotPassword() {
+  const emailEl = document.getElementById('fp-email');
+  const msg     = document.getElementById('fp-msg');
+  if (!emailEl.value.trim()) {
+    msg.style.color = 'var(--red)'; msg.textContent = 'Please enter your email'; return;
+  }
+  msg.style.color = 'var(--ink)'; msg.textContent = 'Sending…';
+  try {
+    await api('POST', '/auth/forgot-password', { email: emailEl.value.trim() });
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'If this email exists, a reset link has been sent. Check your inbox.';
+  } catch (e) {
+    msg.style.color = 'var(--red)'; msg.textContent = e.message;
+  }
+}
+
+function showResetForm(token) {
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('app').style.display   = 'none';
+  document.querySelector('.login-card').innerHTML = `
+    <h1 style="font-size:20px;margin-bottom:6px">Set new password</h1>
+    <div class="sub" style="margin-bottom:24px">Enter a new password for your account</div>
+    <div class="fld">
+      <label>New password</label>
+      <input id="rp-pass" type="password" placeholder="••••••••" minlength="6">
+    </div>
+    <div class="fld" style="margin-top:12px">
+      <label>Confirm password</label>
+      <input id="rp-pass2" type="password" placeholder="••••••••">
+    </div>
+    <div id="rp-msg" style="font-size:13px;margin-top:8px;min-height:18px;color:var(--red)"></div>
+    <button class="btn btn-amber" style="width:100%;margin-top:6px;padding:12px 16px;font-size:14px" onclick="submitResetPassword('${token}')">Set new password</button>
+  `;
+  document.getElementById('rp-pass').focus();
+}
+
+async function submitResetPassword(token) {
+  const pass  = document.getElementById('rp-pass').value;
+  const pass2 = document.getElementById('rp-pass2').value;
+  const msg   = document.getElementById('rp-msg');
+  if (!pass || pass.length < 6) { msg.textContent = 'Password must be at least 6 characters'; return; }
+  if (pass !== pass2)           { msg.textContent = 'Passwords do not match'; return; }
+  msg.style.color = 'var(--ink)'; msg.textContent = 'Saving…';
+  try {
+    await api('POST', '/auth/reset-password', { token, password: pass });
+    msg.style.color = 'var(--green)';
+    msg.textContent = 'Password updated! Redirecting to sign in…';
+    setTimeout(() => { location.hash = ''; location.reload(); }, 1800);
+  } catch (e) {
+    msg.style.color = 'var(--red)'; msg.textContent = e.message;
   }
 }
 

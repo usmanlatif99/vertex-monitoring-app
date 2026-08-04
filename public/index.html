@@ -30,7 +30,10 @@
         <input id="l-email" type="email" placeholder="your@email.com" autocomplete="email" required>
       </div>
       <div class="fld" style="margin-top:12px">
-        <label>Password</label>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <label>Password</label>
+          <button type="button" onclick="showForgotForm()" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0;line-height:1">Forgot password?</button>
+        </div>
         <input id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password" required>
       </div>
       <div id="l-err" style="color:var(--red);font-size:13px;margin-top:8px;min-height:18px"></div>
