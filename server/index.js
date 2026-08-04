@@ -34,8 +34,9 @@ app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/users',     require('./routes/users'));
 app.use('/api/tasks',     require('./routes/tasks'));
 app.use('/api/logs',      require('./routes/logs'));
-app.use('/api/comments',  require('./routes/comments'));
-app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/comments',     require('./routes/comments'));
+app.use('/api/dashboard',    require('./routes/dashboard'));
+app.use('/api/attachments',  require('./routes/attachments'));
 
 // Serve frontend
 const publicDir = path.join(__dirname, '../public');

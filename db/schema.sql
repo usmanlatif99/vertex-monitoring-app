@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS task_comments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Columns added after initial deploy
+ALTER TABLE daily_logs    ADD COLUMN IF NOT EXISTS ad_hoc_title VARCHAR(200);
+ALTER TABLE task_comments ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES task_comments(id);
+
+CREATE TABLE IF NOT EXISTS task_attachments (
+  id            SERIAL       PRIMARY KEY,
+  task_id       INTEGER      NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  uploaded_by   INTEGER      NOT NULL REFERENCES users(id),
+  original_name VARCHAR(500) NOT NULL,
+  stored_name   VARCHAR(200) NOT NULL UNIQUE,
+  mime_type     VARCHAR(100) NOT NULL,
+  file_size     INTEGER      NOT NULL,
+  uploaded_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_tasks_assignee   ON tasks(assignee_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_company    ON tasks(company);
@@ -69,3 +84,4 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status     ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_logs_user_date   ON daily_logs(user_id, log_date);
 CREATE INDEX IF NOT EXISTS idx_logs_task        ON daily_logs(task_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task    ON task_comments(task_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_task ON task_attachments(task_id);

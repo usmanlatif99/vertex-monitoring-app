@@ -758,10 +758,11 @@ async function submitEditUser(e, userId) {
 // ── TASK DETAIL ───────────────────────────────────────────────────────────────
 async function renderDetail(id) {
   const main = document.getElementById('main');
-  const [task, logs, comments] = await Promise.all([
+  const [task, logs, comments, attachments] = await Promise.all([
     api('GET', `/tasks/${id}`),
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
+    api('GET', `/attachments/task/${id}`),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
@@ -846,31 +847,62 @@ async function renderDetail(id) {
       </div>
     </div>
 
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <h2>Objectives</h2>
-        <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${pct === 100 ? 'var(--green)' : 'var(--ink)'}">${pct}%</span>
-      </div>
-      <div class="progress" style="margin-bottom:14px">
-        <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--accent)'}"></i>
-      </div>
-      ${(task.objectives || []).length
-        ? task.objectives.map(o => `
-          <label class="obj${o.done ? ' done' : ''}">
-            <input type="checkbox" ${o.done ? 'checked' : ''} ${canAct ? '' : 'disabled'}
-              onchange="toggleObj(${task.id}, ${o.id}, this.checked)">
-            <span>${esc(o.text)}</span>
-          </label>`).join('')
-        : '<div class="empty">No objectives defined</div>'}
-
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
-        <div class="small muted" style="margin-bottom:6px">
-          Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2>Objectives</h2>
+          <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:${pct === 100 ? 'var(--green)' : 'var(--ink)'}">${pct}%</span>
         </div>
+        <div class="progress" style="margin-bottom:14px">
+          <i style="width:${pct}%;background:${pct === 100 ? 'var(--green)' : 'var(--accent)'}"></i>
+        </div>
+        ${(task.objectives || []).length
+          ? task.objectives.map(o => `
+            <label class="obj${o.done ? ' done' : ''}">
+              <input type="checkbox" ${o.done ? 'checked' : ''} ${canAct ? '' : 'disabled'}
+                onchange="toggleObj(${task.id}, ${o.id}, this.checked)">
+              <span>${esc(o.text)}</span>
+            </label>`).join('')
+          : '<div class="empty">No objectives defined</div>'}
+
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+          <div class="small muted" style="margin-bottom:6px">
+            Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h2>Attachments</h2>
+          <span class="muted small">${(attachments||[]).length} file${(attachments||[]).length !== 1 ? 's' : ''}</span>
+        </div>
+        ${(attachments||[]).length ? (attachments||[]).map(a => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+            <span class="code" style="font-size:11px;min-width:36px;text-align:center">${fileTypeLabel(a.mime_type)}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.original_name)}">${esc(a.original_name)}</div>
+              <div class="muted small">${esc(a.uploader_name)} · ${fmtDateTime(a.uploaded_at)} · ${fmtSize(a.file_size)}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-ghost btn-sm" onclick="downloadAttachment(${a.id})">Download</button>
+              ${isAdmin || a.uploaded_by === G.me.id ? `<button class="btn btn-sm" style="background:var(--red);color:#fff;padding:5px 9px" onclick="deleteAttachment(${a.id},${task.id})">×</button>` : ''}
+            </div>
+          </div>`).join('') : '<div class="empty" style="padding:8px 0">No files attached</div>'}
+        ${canAct ? `
+          <div style="margin-top:12px">
+            <label class="btn btn-ghost btn-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Attach file
+              <input type="file" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="uploadAttachment(${task.id},this)">
+            </label>
+            <span class="muted small" style="margin-left:8px;font-size:12px">PDF, Word, Excel, images · max 20 MB</span>
+          </div>` : ''}
       </div>
     </div>
   </div>`;
 
+  window._attachments = attachments || [];
   startCommentPolling(id);
 }
 
@@ -1247,6 +1279,85 @@ async function submitReply(taskId, parentId, inputId) {
   } catch (ex) {
     toast(ex.message, 'error');
     btn.disabled = false;
+  }
+}
+
+// ── Attachment helpers ────────────────────────────────────────────────────────
+function fmtSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function fileTypeLabel(mime) {
+  if (!mime) return 'FILE';
+  if (mime === 'application/pdf') return 'PDF';
+  if (mime.includes('word') || mime.includes('msword')) return 'DOC';
+  if (mime.includes('excel') || mime.includes('spreadsheet')) return 'XLS';
+  if (mime.startsWith('image/')) return 'IMG';
+  return 'FILE';
+}
+
+async function uploadAttachment(taskId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 20 * 1024 * 1024) {
+    toast('File too large — maximum 20 MB', 'error');
+    input.value = '';
+    return;
+  }
+  const label = input.closest('label');
+  if (label) label.style.opacity = '0.5';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch(`/api/attachments/task/${taskId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${G.token}` },
+      body: fd,
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Upload failed');
+    toast('File attached', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+    input.value = '';
+    if (label) label.style.opacity = '';
+  }
+}
+
+async function downloadAttachment(id) {
+  const att = (window._attachments || []).find(a => a.id === id);
+  const filename = att ? att.original_name : 'download';
+  try {
+    const r = await fetch(`/api/attachments/${id}/download`, {
+      headers: { 'Authorization': `Bearer ${G.token}` }
+    });
+    if (!r.ok) throw new Error('Download failed');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function deleteAttachment(id, taskId) {
+  if (!confirm('Remove this attachment?')) return;
+  try {
+    await api('DELETE', `/attachments/${id}`);
+    toast('Attachment removed', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
   }
 }
 
