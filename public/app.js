@@ -884,11 +884,18 @@ async function submitComment(taskId) {
   if (!el?.value.trim()) return;
   btn.disabled = true;
   try {
-    await api('POST', '/comments', { task_id: taskId, text: el.value.trim() });
+    const c = await api('POST', '/comments', { task_id: taskId, text: el.value.trim() });
+    if (!c) return;
     el.value = '';
-    renderView();
+    const list = document.getElementById('comments-list');
+    const empty = list.querySelector('.muted.small');
+    if (empty) empty.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = commentHtml(c, {}, taskId);
+    list.appendChild(wrapper.firstElementChild);
   } catch (ex) {
     toast(ex.message, 'error');
+  } finally {
     btn.disabled = false;
   }
 }
@@ -1156,8 +1163,23 @@ async function submitReply(taskId, parentId, inputId) {
   const btn = el.nextElementSibling;
   btn.disabled = true;
   try {
-    await api('POST', '/comments', { task_id: taskId, text: el.value.trim(), parent_id: parentId });
-    renderView();
+    const r = await api('POST', '/comments', { task_id: taskId, text: el.value.trim(), parent_id: parentId });
+    if (!r) return;
+    const box = document.getElementById(`reply-box-${parentId}`);
+    const replyEl = document.createElement('div');
+    replyEl.innerHTML = `
+      <div class="comment" style="margin-left:20px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px">
+          ${r.user_role === 'employee' ? workUpdateBadge() : ''}
+          <b>${esc(r.user_name || '')}</b>
+          <span class="t">${fmtDateTime(r.created_at)}</span>
+        </div>
+        <div style="margin-top:4px">${esc(r.text)}</div>
+      </div>`;
+    if (box) {
+      box.insertAdjacentElement('afterend', replyEl.firstElementChild);
+      box.innerHTML = '';
+    }
   } catch (ex) {
     toast(ex.message, 'error');
     btn.disabled = false;
