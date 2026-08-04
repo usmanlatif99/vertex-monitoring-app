@@ -247,7 +247,9 @@ async function renderMyDay() {
     api('GET', `/logs?date=${today}`),
   ]);
 
-  const pending = (myTasks || []).filter(t => !['completed', 'cancelled'].includes(t.status));
+  const pending = (myTasks || []).filter(t =>
+    !['completed', 'cancelled'].includes(t.status) && t.assignee_id === G.me.id
+  );
   const logs    = todayLogs || [];
   const opts    = pending.map(t =>
     `<option value="${t.id}">${esc(t.code)} — ${esc(t.title)}</option>`).join('');
