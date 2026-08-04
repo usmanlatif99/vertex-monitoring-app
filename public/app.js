@@ -182,9 +182,11 @@ function renderNav() {
   const adminItems = [
     ['dashboard', 'Dashboard'], ['team', 'Team tasks'],
     ['assign', 'Assign task'], ['users', 'Manage users'], ['myday', 'My day'],
+    ['password', 'Change password'],
   ];
   const empItems = [
     ['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+    ['password', 'Change password'],
   ];
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
@@ -231,6 +233,7 @@ function renderView() {
     users:     renderUsers,
     detail:    () => renderDetail(G.detailId),
     editTask:  () => renderEditTask(G.editTaskId),
+    password:  renderChangePassword,
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -873,6 +876,54 @@ async function submitComment(taskId) {
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+// ── CHANGE PASSWORD ───────────────────────────────────────────────────────────
+async function renderChangePassword() {
+  const main = document.getElementById('main');
+  main.innerHTML = `
+  <div class="pagehead">
+    <div><h1>Change password</h1><div class="sub">Update your account password</div></div>
+  </div>
+  <div class="card" style="max-width:440px">
+    <form id="pw-form" onsubmit="submitChangePassword(event)">
+      <div class="fld">
+        <label>Current password</label>
+        <input id="pw-cur" type="password" required placeholder="Enter current password">
+      </div>
+      <div class="fld">
+        <label>New password</label>
+        <input id="pw-new" type="password" required minlength="6" placeholder="Min 6 characters">
+      </div>
+      <div class="fld">
+        <label>Confirm new password</label>
+        <input id="pw-confirm" type="password" required minlength="6" placeholder="Repeat new password">
+      </div>
+      <button type="submit" class="btn btn-amber">Update password</button>
+    </form>
+  </div>`;
+}
+
+async function submitChangePassword(e) {
+  e.preventDefault();
+  const cur     = document.getElementById('pw-cur').value;
+  const newPw   = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  if (newPw !== confirm) {
+    toast('New passwords do not match', 'error');
+    return;
+  }
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  try {
+    await api('PUT', '/users/me/password', { current_password: cur, new_password: newPw });
+    toast('Password updated ✓', 'success');
+    e.target.reset();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  } finally {
     btn.disabled = false;
   }
 }
