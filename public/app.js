@@ -339,7 +339,7 @@ function logRow(l) {
         ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>`
         : '<span class="code">AD-HOC</span>'}
       <span style="font-size:13px;font-weight:500">${esc(l.task_title || l.ad_hoc_title || 'Other work')}</span>
-      ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
+      ${l.task_status ? `<span class="pill s-${l.task_status}">${ST_LABEL[l.task_status] || l.task_status}</span>` : ''}
       ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
     </div>
     <div style="font-size:13.5px;margin-bottom:2px">${esc(l.description)}</div>
@@ -965,7 +965,7 @@ async function renderDailyLogs() {
               ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>
                  <span style="font-size:13px;font-weight:500">${esc(l.task_title || '')}</span>`
               : `<span class="code">AD-HOC</span><span style="font-size:13px;font-weight:500">${esc(l.ad_hoc_title || 'Other work')}</span>`}
-            ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
+            ${l.task_status ? `<span class="pill s-${l.task_status}">${ST_LABEL[l.task_status] || l.task_status}</span>` : ''}
             ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
           </div>
           <div style="font-size:13.5px;margin-top:4px">${esc(l.description)}</div>

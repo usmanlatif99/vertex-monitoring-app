@@ -7,7 +7,8 @@ const LOG_SELECT = `
     u.name       AS user_name,
     t.code       AS task_code,
     t.title      AS task_title,
-    t.company    AS task_company
+    t.company    AS task_company,
+    t.status     AS task_status
   FROM daily_logs l
   LEFT JOIN users u ON u.id  = l.user_id
   LEFT JOIN tasks t ON t.id  = l.task_id
