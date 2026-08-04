@@ -184,7 +184,7 @@ router.put('/:id', auth, async (req, res) => {
 router.put('/:id/objectives/:objId', auth, async (req, res) => {
   const { done } = req.body;
   try {
-    const { rows: tRows } = await db.query('SELECT assignee_id FROM tasks WHERE id=$1', [req.params.id]);
+    const { rows: tRows } = await db.query('SELECT assignee_id, status FROM tasks WHERE id=$1', [req.params.id]);
     if (!tRows[0]) return res.status(404).json({ error: 'Task not found' });
     if (req.user.role !== 'admin' && tRows[0].assignee_id !== req.user.id) {
       return res.status(403).json({ error: 'Access denied' });
@@ -194,6 +194,18 @@ router.put('/:id/objectives/:objId', auth, async (req, res) => {
       [done, req.params.objId, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Objective not found' });
+
+    // Auto-update task status based on objectives completion
+    const { rows: allObjs } = await db.query(
+      'SELECT done FROM objectives WHERE task_id=$1', [req.params.id]
+    );
+    const allDone = allObjs.length > 0 && allObjs.every(o => o.done);
+    if (allDone) {
+      await db.query('UPDATE tasks SET status=$1, updated_at=NOW() WHERE id=$2', ['completed', req.params.id]);
+    } else if (tRows[0].status === 'completed') {
+      await db.query('UPDATE tasks SET status=$1, updated_at=NOW() WHERE id=$2', ['in_progress', req.params.id]);
+    }
+
     res.json(rows[0]);
   } catch (e) {
     console.error(e);
