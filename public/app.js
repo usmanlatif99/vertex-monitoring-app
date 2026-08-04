@@ -172,7 +172,7 @@ function updateHeader() {
   document.getElementById('hdr-name').textContent = G.me.name;
   document.getElementById('hdr-role').textContent = G.me.role === 'admin'
     ? 'Admin · Vertex + Vision'
-    : `${G.me.department || ''} · ${G.me.company === 'VTX' ? 'Vertex Electronics' : 'Vision Engineering'}`;
+    : `${G.me.department || ''} · ${G.me.company === 'VTX' ? 'Vertex Electronics' : G.me.company === 'VSN' ? 'Vision Engineering' : 'Vertex + Vision'}`;
   document.getElementById('hdr-av').textContent = initials(G.me.name);
   document.getElementById('hdr-date').textContent = ' · ' +
     new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
@@ -465,10 +465,10 @@ async function renderDashboard() {
         <h2 style="margin-bottom:10px">Not yet logged today</h2>
         ${notLogged.map(u => `
           <div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)">
-            <span class="dot" style="background:${u.company === 'VTX' ? 'var(--amber)' : 'var(--blue)'}"></span>
+            <span class="dot" style="background:${u.company === 'VTX' ? 'var(--amber)' : u.company === 'VSN' ? 'var(--accent)' : 'var(--green)'}"></span>
             <div>
               <div style="font-size:13.5px;font-weight:500">${esc(u.name)}</div>
-              <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : 'Vision'}</div>
+              <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : u.company === 'VSN' ? 'Vision' : 'Both'}</div>
             </div>
           </div>`).join('') || '<div class="empty">Everyone has logged ✓</div>'}
       </div>
@@ -527,7 +527,7 @@ async function renderAssign() {
   const users = await api('GET', '/users') || [];
   const emps  = users.filter(u => u.role === 'employee' && u.active);
 
-  window._assignEmps = { VTX: emps.filter(u => u.company === 'VTX'), VSN: emps.filter(u => u.company === 'VSN') };
+  window._assignEmps = { VTX: emps.filter(u => u.company === 'VTX' || u.company === 'ALL'), VSN: emps.filter(u => u.company === 'VSN' || u.company === 'ALL') };
   const empOpts = (list) => list.map(u =>
     `<option value="${u.id}">${esc(u.name)} — ${esc(u.department || '')}</option>`).join('');
 
@@ -685,8 +685,9 @@ function showUserForm(userId) {
         <div class="fld">
           <label>Company</label>
           <select id="uf-comp">
-            <option value="VTX" ${!user || user.company === 'VTX' ? 'selected' : ''}>Vertex Electronics</option>
+            <option value="VTX" ${(!user || user.company === 'VTX') ? 'selected' : ''}>Vertex Electronics</option>
             <option value="VSN" ${user?.company === 'VSN' ? 'selected' : ''}>Vision Engineering</option>
+            <option value="ALL" ${user?.company === 'ALL' ? 'selected' : ''}>Both companies</option>
             <option value="ALL" ${user?.company === 'ALL' ? 'selected' : ''}>Both (ALL)</option>
           </select>
         </div>
@@ -981,7 +982,7 @@ async function renderDailyLogs() {
           <span class="dot" style="background:var(--line)"></span>
           <div>
             <div style="font-size:13.5px;font-weight:500">${esc(u.name)}</div>
-            <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : 'Vision'}</div>
+            <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : u.company === 'VSN' ? 'Vision' : 'Both'}</div>
           </div>
         </div>`).join('')}
     </div>` : ''}`;
