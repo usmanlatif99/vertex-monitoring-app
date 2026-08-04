@@ -745,7 +745,7 @@ function drawTeamPage() {
 async function renderAssign() {
   const main  = document.getElementById('main');
   const users = await api('GET', '/users') || [];
-  const emps  = users.filter(u => u.role === 'employee' && u.active);
+  const emps  = users.filter(u => u.active);
 
   window._assignEmps = { VTX: emps.filter(u => u.company === 'VTX' || u.company === 'ALL'), VSN: emps.filter(u => u.company === 'VSN' || u.company === 'ALL') };
   const empOpts = (list) => list.map(u =>
@@ -755,7 +755,7 @@ async function renderAssign() {
 
   main.innerHTML = `
   <div class="pagehead">
-    <div><h1>Assign task</h1><div class="sub">Create and assign a task to an employee</div></div>
+    <div><h1>Assign task</h1><div class="sub">Create and assign a task to any employee or admin</div></div>
   </div>
   <div class="card" style="max-width:660px">
     <form id="assign-form" onsubmit="submitAssign(event)">
