@@ -790,30 +790,38 @@ async function renderDetail(id) {
         <div style="font-size:13.5px;white-space:pre-wrap;line-height:1.6">${esc(task.description)}</div>
       </div>` : ''}
 
-      <div class="card" style="margin-bottom:16px">
-        <h2 style="margin-bottom:10px">Work log</h2>
-        ${(logs || []).length ? (logs || []).map(l => `
-          <div class="logentry">
-            <div class="top">
-              <b style="font-size:13px">${esc(l.user_name || '')}</b>
-              <span class="t">${fmt(l.log_date)} ${fmtTime(l.logged_at)}</span>
-              ${l.status_after ? `<span class="pill s-${l.status_after}">→ ${ST_LABEL[l.status_after] || l.status_after}</span>` : ''}
-              ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
-            </div>
-            <div style="font-size:13.5px">${esc(l.description)}</div>
-          </div>`).join('')
-          : '<div class="empty">No log entries for this task yet</div>'}
-      </div>
-
       <div class="card">
-        <h2 style="margin-bottom:10px">Comments</h2>
+        <h2 style="margin-bottom:14px">Comments & Updates</h2>
         <div id="comments-list">
-          ${(comments || []).map(c => `
-            <div class="comment">
-              <b>${esc(c.user_name || '')}</b>
-              <span class="t">${fmtDateTime(c.created_at)}</span>
-              <div style="margin-top:4px">${esc(c.text)}</div>
-            </div>`).join('') || '<div class="muted small" style="padding:8px 0">No comments yet</div>'}
+          ${(() => {
+            const timeline = [
+              ...(logs || []).map(l => ({ ...l, _type: 'log', _ts: new Date(l.logged_at) })),
+              ...(comments || []).map(c => ({ ...c, _type: 'comment', _ts: new Date(c.created_at) }))
+            ].sort((a, b) => a._ts - b._ts);
+
+            if (!timeline.length) return '<div class="muted small" style="padding:8px 0">No activity yet</div>';
+
+            return timeline.map(item => {
+              if (item._type === 'log') {
+                return `<div class="comment" style="border-left:3px solid var(--green);padding-left:10px">
+                  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                    <span style="font-size:11px;font-weight:600;color:#fff;background:var(--green);padding:2px 7px;border-radius:4px">Work update</span>
+                    <b style="font-size:13px">${esc(item.user_name || '')}</b>
+                    <span class="t">${fmt(item.log_date)} ${fmtTime(item.logged_at)}</span>
+                    ${item.status_after ? `<span class="pill s-${item.status_after}">→ ${ST_LABEL[item.status_after] || item.status_after}</span>` : ''}
+                    ${item.hours ? `<span class="muted small">${item.hours}h</span>` : ''}
+                  </div>
+                  <div style="margin-top:5px;font-size:13.5px">${esc(item.description)}</div>
+                </div>`;
+              } else {
+                return `<div class="comment">
+                  <b>${esc(item.user_name || '')}</b>
+                  <span class="t">${fmtDateTime(item.created_at)}</span>
+                  <div style="margin-top:4px">${esc(item.text)}</div>
+                </div>`;
+              }
+            }).join('');
+          })()}
         </div>
         <div style="display:flex;gap:8px;margin-top:12px">
           <input id="c-txt" placeholder="Write a comment…" style="flex:1">
