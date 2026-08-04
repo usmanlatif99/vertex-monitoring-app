@@ -5,7 +5,7 @@ const G = {
   me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null,
   tf: { search: '', status: '', priority: '', assignee: '' },
   mf: { search: '', status: '', priority: '' },
-  _teamTasks: [], _myTasks: [],
+  _teamTasks: [], _myTasks: [], _selectedIds: new Set(),
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -157,9 +157,15 @@ function clearMyFilters() {
 function updateTeamTable() {
   const el = document.getElementById('team-table');
   if (!el) return;
-  const filtered = applyTaskFilters(G._teamTasks, G.tf);
+  const filtered  = applyTaskFilters(G._teamTasks, G.tf);
   const hasFilter = G.tf.search || G.tf.status || G.tf.priority || G.tf.assignee;
-  el.innerHTML = (hasFilter
+  const bulkBar   = G._selectedIds.size > 0 ? `
+    <div id="bulk-bar" style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--accent-s);border-radius:8px;margin-bottom:12px;border:1px solid #b8daf2;flex-wrap:wrap">
+      <span style="font-size:13.5px;font-weight:600">${G._selectedIds.size} task${G._selectedIds.size > 1 ? 's' : ''} selected</span>
+      <button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" onclick="archiveSelected()">Archive selected</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear selection</button>
+    </div>` : '';
+  el.innerHTML = bulkBar + (hasFilter
     ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${G._teamTasks.length} tasks</div>`
     : '') + taskTable(filtered, true);
 }
@@ -208,14 +214,20 @@ function duePill(t) {
 // ── Task table ─────────────────────────────────────────────────────────────────
 function taskTable(tasks, showWho) {
   if (!tasks.length) return '<div class="empty">No tasks found</div>';
+  const allChecked = tasks.length > 0 && tasks.every(t => G._selectedIds.has(t.id));
   return `<div class="table-wrap"><table>
     <thead><tr>
+      ${showWho ? `<th style="width:36px;text-align:center"><input type="checkbox" ${allChecked ? 'checked' : ''} title="Select all" onchange="toggleAllCheck(this.checked)"></th>` : ''}
       <th>Code</th><th>Task</th>
       ${showWho ? '<th>Assigned to</th>' : ''}
       <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
     </tr></thead>
     <tbody>
     ${tasks.map(t => `<tr class="click" onclick="openTask(${t.id})">
+      ${showWho ? `<td style="text-align:center" onclick="event.stopPropagation()">
+        <input type="checkbox" class="task-chk" value="${t.id}" ${G._selectedIds.has(t.id) ? 'checked' : ''}
+          onchange="toggleTaskCheck(${t.id}, this.checked)">
+      </td>` : ''}
       <td>${codeChip(t)}</td>
       <td class="task-title">${esc(t.title)}</td>
       ${showWho ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
@@ -710,6 +722,7 @@ async function renderDashboard() {
 async function renderTeam() {
   const main = document.getElementById('main');
   const cf   = G.compFilter;
+  G._selectedIds.clear();
   main.innerHTML = '<div class="loading"><div class="spinner"></div>Loading…</div>';
   G._teamTasks = await api('GET', `/tasks${cf !== 'ALL' ? `?company=${cf}` : ''}`) || [];
   drawTeamPage();
@@ -1174,6 +1187,38 @@ async function archiveTask(taskId) {
     await api('PATCH', `/tasks/${taskId}/archive`);
     toast('Task archived', 'success');
     go('team');
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+function toggleTaskCheck(id, checked) {
+  if (checked) G._selectedIds.add(id);
+  else G._selectedIds.delete(id);
+  updateTeamTable();
+}
+
+function toggleAllCheck(checked) {
+  const filtered = applyTaskFilters(G._teamTasks, G.tf);
+  filtered.forEach(t => checked ? G._selectedIds.add(t.id) : G._selectedIds.delete(t.id));
+  updateTeamTable();
+}
+
+function clearSelection() {
+  G._selectedIds.clear();
+  updateTeamTable();
+}
+
+async function archiveSelected() {
+  const ids = [...G._selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`Archive ${ids.length} task${ids.length > 1 ? 's' : ''}? They can be restored from Archived tasks.`)) return;
+  try {
+    await Promise.all(ids.map(id => api('PATCH', `/tasks/${id}/archive`)));
+    G._selectedIds.clear();
+    G._teamTasks = G._teamTasks.filter(t => !ids.includes(t.id));
+    toast(`${ids.length} task${ids.length > 1 ? 's' : ''} archived`, 'success');
+    updateTeamTable();
   } catch (ex) {
     toast(ex.message, 'error');
   }
