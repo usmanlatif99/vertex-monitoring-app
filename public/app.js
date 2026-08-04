@@ -688,7 +688,6 @@ function showUserForm(userId) {
             <option value="VTX" ${(!user || user.company === 'VTX') ? 'selected' : ''}>Vertex Electronics</option>
             <option value="VSN" ${user?.company === 'VSN' ? 'selected' : ''}>Vision Engineering</option>
             <option value="ALL" ${user?.company === 'ALL' ? 'selected' : ''}>Both companies</option>
-            <option value="ALL" ${user?.company === 'ALL' ? 'selected' : ''}>Both (ALL)</option>
           </select>
         </div>
         <div class="fld">
