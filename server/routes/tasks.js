@@ -2,6 +2,7 @@ const router = require('express').Router();
 const db     = require('../db');
 const auth   = require('../middleware/auth');
 const email  = require('../email');
+const push   = require('../push');
 
 const TASK_SELECT = `
   SELECT t.*,
@@ -130,11 +131,15 @@ router.post('/', auth, async (req, res) => {
     );
     res.status(201).json(rows[0]);
 
-    // Fire-and-forget: email the assignee
+    // Fire-and-forget: notify the assignee
     const { rows: assigneeRows } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
     if (assigneeRows[0]) {
       email.taskAssigned(rows[0], assigneeRows[0].email).catch(e => console.error('[email]', e.message));
     }
+    push.toUser(assignee_id, {
+      title: 'New task assigned',
+      body:  `${rows[0].code}: ${rows[0].title}`,
+    }).catch(e => console.error('[push]', e.message));
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);
@@ -194,7 +199,11 @@ router.put('/:id', auth, async (req, res) => {
             [req.user.id]
           );
           await email.statusChanged(rows[0], oldStatus, status, req.user.name, admins.map(a => a.email));
-        } catch (e) { console.error('[email]', e.message); }
+          await push.toAdmins({
+            title: `[${rows[0].code}] Status updated`,
+            body:  `${req.user.name} → ${status.replace('_', ' ')}`,
+          }, req.user.id);
+        } catch (e) { console.error('[notify]', e.message); }
       })();
     }
   } catch (e) {

@@ -2,6 +2,7 @@ const router = require('express').Router();
 const db     = require('../db');
 const auth   = require('../middleware/auth');
 const email  = require('../email');
+const push   = require('../push');
 
 router.get('/', auth, async (req, res) => {
   const { task_id } = req.query;
@@ -82,7 +83,18 @@ router.post('/', auth, async (req, res) => {
         if (recipientEmails.length) {
           await email.newComment(task, commenter.name, rows[0].text, recipientEmails);
         }
-      } catch (e) { console.error('[email]', e.message); }
+
+        // Push notification
+        const pushPayload = {
+          title: `[${task.code}] New comment`,
+          body:  `${commenter.name}: ${rows[0].text.slice(0, 80)}`,
+        };
+        if (commenter.role === 'employee') {
+          await push.toAdmins(pushPayload, commenter.id);
+        } else {
+          if (task.assignee_id !== commenter.id) await push.toUser(task.assignee_id, pushPayload);
+        }
+      } catch (e) { console.error('[notify]', e.message); }
     })();
   } catch (e) {
     console.error(e);

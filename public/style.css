@@ -217,6 +217,14 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 .row       { display: flex; gap: 12px; }
 .row > *   { flex: 1; min-width: 0; }
 
+/* ── Push notification banner ────────────────────────────────────────────────── */
+#push-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  background: var(--accent-s); border-bottom: 1px solid #b8daf2;
+  padding: 10px 20px; font-size: 13.5px; color: var(--ink);
+  width: 100%;
+}
+
 /* ── Filter bar ─────────────────────────────────────────────────────────────── */
 .filter-bar       { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
 .search-wrap      { position: relative; flex: 1; min-width: 180px; }

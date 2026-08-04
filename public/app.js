@@ -280,6 +280,68 @@ function initApp() {
   updateHeader();
   renderNav();
   renderView();
+  setupPush();
+}
+
+// ── Push notifications ─────────────────────────────────────────────────────────
+async function setupPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+    if (Notification.permission === 'granted') {
+      await subscribePush();
+    } else if (Notification.permission === 'default' && !sessionStorage.getItem('push_dismissed')) {
+      showPushBanner();
+    }
+  } catch (e) { console.warn('[push]', e.message); }
+}
+
+function showPushBanner() {
+  if (document.getElementById('push-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'push-banner';
+  banner.innerHTML = `
+    <span>🔔 Enable browser notifications for task alerts</span>
+    <button onclick="enablePush()" class="btn btn-amber btn-sm" style="margin-left:12px">Enable</button>
+    <button onclick="dismissPushBanner()" style="background:none;border:none;color:var(--ink-soft);font-size:18px;cursor:pointer;margin-left:8px;line-height:1">×</button>`;
+  document.querySelector('.shell').prepend(banner);
+}
+
+function dismissPushBanner() {
+  sessionStorage.setItem('push_dismissed', '1');
+  const b = document.getElementById('push-banner');
+  if (b) b.remove();
+}
+
+async function enablePush() {
+  const perm = await Notification.requestPermission();
+  dismissPushBanner();
+  if (perm === 'granted') await subscribePush();
+}
+
+async function subscribePush() {
+  try {
+    const sw  = await navigator.serviceWorker.ready;
+    const res = await fetch('/api/push/vapid-key');
+    if (!res.ok) return;
+    const { publicKey } = await res.json();
+    const sub = await sw.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+    await fetch('/api/push/subscribe', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${G.token}` },
+      body:    JSON.stringify(sub.toJSON()),
+    });
+  } catch (e) { console.warn('[push] subscribe:', e.message); }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
 // ── Header ─────────────────────────────────────────────────────────────────────
