@@ -65,7 +65,7 @@ module.exports = {
     const rows = [
       taskRow('Task',     `<strong>${task.code}</strong> — ${task.title}`),
       taskRow('Priority', task.priority ? task.priority[0].toUpperCase() + task.priority.slice(1) : '—'),
-      taskRow('Deadline', task.due_date ? task.due_date.slice(0, 10) : 'Not set'),
+      taskRow('Deadline', task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : 'Not set'),
     ];
     if (task.description) rows.push(taskRow('Details', task.description));
 
@@ -127,7 +127,7 @@ module.exports = {
         <td style="padding:8px 12px;border-bottom:1px solid #dde3ec;font-family:monospace;font-size:12px;color:#7A4A00">${t.code}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #dde3ec;font-size:13px">${t.title}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #dde3ec;font-size:13px;color:#6b7a90">${t.assignee_name || '—'}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid #dde3ec;font-size:13px;color:#dc3545;font-weight:600">${t.due_date ? t.due_date.slice(0, 10) : '—'}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #dde3ec;font-size:13px;color:#dc3545;font-weight:600">${t.due_date ? new Date(t.due_date).toISOString().slice(0, 10) : '—'}</td>
       </tr>`
     ).join('');
     const count = overdueTasks.length;
