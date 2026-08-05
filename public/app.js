@@ -5,7 +5,7 @@ const G = {
   me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null,
   tf: { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false },
   mf: { search: '', status: '', priority: '' },
-  _teamTasks: [], _myTasks: [], _selectedIds: new Set(), _dashFilter: null,
+  _teamTasks: [], _myTasks: [], _archivedTasks: [], _selectedIds: new Set(), _archivedIds: new Set(), _dashFilter: null,
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -1319,8 +1319,10 @@ async function archiveSelected() {
 async function restoreTask(taskId) {
   try {
     await api('PATCH', `/tasks/${taskId}/archive`);
+    G._archivedTasks = G._archivedTasks.filter(t => t.id !== taskId);
+    G._archivedIds.delete(taskId);
     toast('Task restored', 'success');
-    renderView();
+    drawArchivedPage();
   } catch (ex) {
     toast(ex.message, 'error');
   }
@@ -1340,8 +1342,16 @@ async function reassignTask(taskId) {
 }
 
 async function renderArchived() {
+  const main = document.getElementById('main');
+  G._archivedIds.clear();
+  main.innerHTML = '<div class="loading"><div class="spinner"></div>Loading…</div>';
+  G._archivedTasks = await api('GET', '/tasks?archived=true') || [];
+  drawArchivedPage();
+}
+
+function drawArchivedPage() {
   const main  = document.getElementById('main');
-  const tasks = await api('GET', '/tasks?archived=true');
+  const tasks = G._archivedTasks;
 
   if (!tasks.length) {
     main.innerHTML = `
@@ -1350,15 +1360,26 @@ async function renderArchived() {
     return;
   }
 
+  const allChecked = tasks.length > 0 && tasks.every(t => G._archivedIds.has(t.id));
+  const bulkBar = G._archivedIds.size > 0 ? `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--accent-s);border-radius:8px;margin-bottom:12px;border:1px solid #b8daf2;flex-wrap:wrap">
+      <span style="font-size:13.5px;font-weight:600">${G._archivedIds.size} task${G._archivedIds.size > 1 ? 's' : ''} selected</span>
+      <button class="btn btn-sm" style="color:var(--green);border-color:var(--green)" onclick="restoreSelected()">Restore selected</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearArchivedSelection()">Clear selection</button>
+    </div>` : '';
+
   main.innerHTML = `
     <div class="pagehead"><h1>Archived Tasks</h1></div>
+    ${bulkBar}
     <div class="card" style="overflow-x:auto">
       <table class="tbl">
         <thead><tr>
+          <th style="width:36px"><input type="checkbox" ${allChecked ? 'checked' : ''} onchange="toggleAllArchivedCheck(this.checked)" title="Select all"></th>
           <th>Code</th><th>Title</th><th>Assigned to</th><th>Status</th><th>Archived on</th><th></th>
         </tr></thead>
         <tbody>
           ${tasks.map(t => `<tr>
+            <td><input type="checkbox" ${G._archivedIds.has(t.id) ? 'checked' : ''} onchange="toggleArchivedCheck(${t.id}, this.checked)"></td>
             <td><code>${esc(t.code)}</code></td>
             <td>${esc(t.title)}</td>
             <td>${esc(t.assignee_name || '—')}</td>
@@ -1369,6 +1390,37 @@ async function renderArchived() {
         </tbody>
       </table>
     </div>`;
+}
+
+function toggleArchivedCheck(id, checked) {
+  if (checked) G._archivedIds.add(id);
+  else G._archivedIds.delete(id);
+  drawArchivedPage();
+}
+
+function toggleAllArchivedCheck(checked) {
+  G._archivedTasks.forEach(t => checked ? G._archivedIds.add(t.id) : G._archivedIds.delete(t.id));
+  drawArchivedPage();
+}
+
+function clearArchivedSelection() {
+  G._archivedIds.clear();
+  drawArchivedPage();
+}
+
+async function restoreSelected() {
+  const ids = [...G._archivedIds];
+  if (!ids.length) return;
+  if (!confirm(`Restore ${ids.length} task${ids.length > 1 ? 's' : ''}?`)) return;
+  try {
+    await Promise.all(ids.map(id => api('PATCH', `/tasks/${id}/archive`)));
+    G._archivedIds.clear();
+    G._archivedTasks = G._archivedTasks.filter(t => !ids.includes(t.id));
+    toast(`${ids.length} task${ids.length > 1 ? 's' : ''} restored`, 'success');
+    drawArchivedPage();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
 }
 
 async function submitComment(taskId) {
