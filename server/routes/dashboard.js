@@ -15,15 +15,15 @@ router.get('/stats', auth, adminOnly, async (req, res) => {
   try {
     const { rows: taskStats } = await db.query(
       `SELECT
-        COUNT(*) FILTER (WHERE t.status NOT IN ('completed','cancelled') ${cf}) AS active,
-        COUNT(*) FILTER (WHERE t.status = 'completed' ${cf})                    AS completed,
-        COUNT(*) FILTER (WHERE t.status = 'blocked' ${cf})                      AS blocked,
+        COUNT(*) FILTER (WHERE t.status NOT IN ('completed','cancelled') AND t.archived = false ${cf}) AS active,
+        COUNT(*) FILTER (WHERE t.status = 'completed' AND t.archived = false ${cf})                    AS completed,
+        COUNT(*) FILTER (WHERE t.status = 'blocked'   AND t.archived = false ${cf})                    AS blocked,
         COUNT(*) FILTER (
-          WHERE t.due_date < $1 AND t.status NOT IN ('completed','cancelled') ${cf}
+          WHERE t.due_date < $1 AND t.status NOT IN ('completed','cancelled') AND t.archived = false ${cf}
         ) AS overdue,
         COUNT(*) FILTER (
           WHERE t.due_date BETWEEN $1 AND $1::date + 7
-            AND t.status NOT IN ('completed','cancelled') ${cf}
+            AND t.status NOT IN ('completed','cancelled') AND t.archived = false ${cf}
         ) AS due_this_week
        FROM tasks t`,
       [today]
