@@ -5,7 +5,7 @@ const G = {
   me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null,
   tf: { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false },
   mf: { search: '', status: '', priority: '' },
-  _teamTasks: [], _myTasks: [], _selectedIds: new Set(),
+  _teamTasks: [], _myTasks: [], _selectedIds: new Set(), _dashFilter: null,
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -159,10 +159,11 @@ function clearTeamFilters() {
 }
 
 function dashFilter(type) {
-  G.tf = { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false };
-  if (type === 'overdue')  G.tf.overdue  = true;
-  if (type === 'blocked')  G.tf.status   = 'blocked';
-  if (type === 'thisweek') G.tf.thisweek = true;
+  const f = { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false };
+  if (type === 'overdue')  f.overdue  = true;
+  if (type === 'blocked')  f.status   = 'blocked';
+  if (type === 'thisweek') f.thisweek = true;
+  G._dashFilter = f;
   go('team');
 }
 
@@ -812,6 +813,8 @@ async function renderTeam() {
   const main = document.getElementById('main');
   const cf   = G.compFilter;
   G._selectedIds.clear();
+  G.tf = G._dashFilter || { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false };
+  G._dashFilter = null;
   main.innerHTML = '<div class="loading"><div class="spinner"></div>Loading…</div>';
   G._teamTasks = await api('GET', `/tasks${cf !== 'ALL' ? `?company=${cf}` : ''}`) || [];
   drawTeamPage();
