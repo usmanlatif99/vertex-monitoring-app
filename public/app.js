@@ -536,7 +536,7 @@ async function renderMyDay() {
   const today = TODAY();
   const [myTasks, todayLogs] = await Promise.all([
     api('GET', '/tasks'),
-    api('GET', `/logs?date=${today}`),
+    api('GET', `/logs?date=${today}&user_id=${G.me.id}`),
   ]);
 
   const pending = (myTasks || []).filter(t =>
