@@ -558,7 +558,7 @@ async function renderMyDay() {
           <div class="fld">
             <label>Task</label>
             <select id="f-task" onchange="toggleAdhocTitle()">
-              <option value="">No specific task (daily task)</option>
+              <option value="">General Work</option>
               ${opts}
             </select>
           </div>
@@ -622,7 +622,7 @@ function logRow(l) {
     <div class="top">
       ${l.task_code
         ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>`
-        : '<span class="code">DAILY TASK</span>'}
+        : '<span class="code">GENERAL</span>'}
       <span style="font-size:13px;font-weight:500">${esc(l.task_title || l.ad_hoc_title || 'Other work')}</span>
       ${l.task_status ? `<span class="pill s-${l.task_status}">${ST_LABEL[l.task_status] || l.task_status}</span>` : ''}
       ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
@@ -1436,7 +1436,7 @@ async function renderDailyLogs() {
             ${l.task_code
               ? `<span class="code ${(l.task_company || '').toLowerCase()}">${esc(l.task_code)}</span>
                  <span style="font-size:13px;font-weight:500">${esc(l.task_title || '')}</span>`
-              : `<span class="code">DAILY TASK</span><span style="font-size:13px;font-weight:500">${esc(l.ad_hoc_title || 'Other work')}</span>`}
+              : `<span class="code">GENERAL</span><span style="font-size:13px;font-weight:500">${esc(l.ad_hoc_title || 'Other work')}</span>`}
             ${l.task_status ? `<span class="pill s-${l.task_status}">${ST_LABEL[l.task_status] || l.task_status}</span>` : ''}
             ${l.hours ? `<span class="muted small">${l.hours}h</span>` : ''}
           </div>
