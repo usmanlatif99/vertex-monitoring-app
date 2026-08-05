@@ -3,7 +3,7 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 const G = {
   me: null, token: null, view: 'login', detailId: null, compFilter: 'ALL', commentPoll: null,
-  tf: { search: '', status: '', priority: '', assignee: '' },
+  tf: { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false },
   mf: { search: '', status: '', priority: '' },
   _teamTasks: [], _myTasks: [], _selectedIds: new Set(),
 };
@@ -87,6 +87,15 @@ function applyTaskFilters(tasks, f) {
   if (f.status)   out = out.filter(t => t.status   === f.status);
   if (f.priority) out = out.filter(t => t.priority  === f.priority);
   if (f.assignee) out = out.filter(t => String(t.assignee_id) === String(f.assignee));
+  if (f.overdue)  out = out.filter(t => isOverdue(t));
+  if (f.thisweek) {
+    const tod = TODAY();
+    const d7  = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    out = out.filter(t => t.due_date &&
+      t.due_date.slice(0, 10) >= tod &&
+      t.due_date.slice(0, 10) <= d7 &&
+      !['completed', 'cancelled'].includes(t.status));
+  }
   return out;
 }
 
@@ -94,7 +103,7 @@ const SEARCH_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
 
 function teamFilterBarHtml(assignees) {
   const f = G.tf;
-  const hasFilter = f.search || f.status || f.priority || f.assignee;
+  const hasFilter = f.search || f.status || f.priority || f.assignee || f.overdue || f.thisweek;
   return `
   <div class="filter-bar">
     <div class="search-wrap">
@@ -145,8 +154,16 @@ function myFilterBarHtml() {
 }
 
 function clearTeamFilters() {
-  G.tf = { search: '', status: '', priority: '', assignee: '' };
+  G.tf = { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false };
   drawTeamPage();
+}
+
+function dashFilter(type) {
+  G.tf = { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false };
+  if (type === 'overdue')  G.tf.overdue  = true;
+  if (type === 'blocked')  G.tf.status   = 'blocked';
+  if (type === 'thisweek') G.tf.thisweek = true;
+  go('team');
 }
 
 function clearMyFilters() {
@@ -734,19 +751,19 @@ async function renderDashboard() {
   </div>
 
   <div class="kpis">
-    <div class="kpi ok">
+    <div class="kpi ok clickable" onclick="go('dailylogs')" title="View daily logs">
       <div class="n">${es.logged_today || 0}/${es.total_employees || 0}</div>
       <div class="l">Logged work today</div>
     </div>
-    <div class="kpi ${+ts.overdue > 0 ? 'warn' : ''}">
+    <div class="kpi ${+ts.overdue > 0 ? 'warn' : ''} clickable" onclick="dashFilter('overdue')" title="View overdue tasks">
       <div class="n">${ts.overdue || 0}</div>
       <div class="l">Overdue tasks</div>
     </div>
-    <div class="kpi ${+ts.blocked > 0 ? 'warn' : ''}">
+    <div class="kpi ${+ts.blocked > 0 ? 'warn' : ''} clickable" onclick="dashFilter('blocked')" title="View blocked tasks">
       <div class="n">${ts.blocked || 0}</div>
       <div class="l">Blocked</div>
     </div>
-    <div class="kpi">
+    <div class="kpi clickable" onclick="dashFilter('thisweek')" title="View tasks due this week">
       <div class="n">${ts.due_this_week || 0}</div>
       <div class="l">Due this week</div>
     </div>
@@ -755,7 +772,7 @@ async function renderDashboard() {
   <div class="grid2" style="grid-template-columns:270px 1fr">
     <div>
       <div class="card" style="margin-bottom:16px">
-        <h2 style="margin-bottom:10px">Not yet logged today</h2>
+        <h2 style="margin-bottom:10px;cursor:pointer" onclick="go('dailylogs')" title="View daily logs">Not yet logged today →</h2>
         ${notLogged.map(u => `
           <div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)">
             <span class="dot" style="background:${u.company === 'VTX' ? 'var(--amber)' : u.company === 'VSN' ? 'var(--accent)' : 'var(--green)'}"></span>
@@ -766,7 +783,7 @@ async function renderDashboard() {
           </div>`).join('') || '<div class="empty">Everyone has logged ✓</div>'}
       </div>
       <div class="card">
-        <h2 style="margin-bottom:10px">Who logged today</h2>
+        <h2 style="margin-bottom:10px;cursor:pointer" onclick="go('dailylogs')" title="View daily logs">Who logged today →</h2>
         ${ppl.filter(u => u.has_logged).map(u => `
           <div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)">
             <span class="dot" style="background:var(--green)"></span>
@@ -779,11 +796,11 @@ async function renderDashboard() {
     </div>
     <div>
       <div class="card" style="margin-bottom:16px">
-        <h2 style="margin-bottom:10px">⚠ Overdue tasks</h2>
+        <h2 style="margin-bottom:10px;cursor:pointer" onclick="dashFilter('overdue')" title="View all overdue tasks">⚠ Overdue tasks →</h2>
         ${overdueT.length ? taskTable(overdueT, true) : '<div class="empty">No overdue tasks</div>'}
       </div>
       <div class="card">
-        <h2 style="margin-bottom:10px">Blocked tasks</h2>
+        <h2 style="margin-bottom:10px;cursor:pointer" onclick="dashFilter('blocked')" title="View all blocked tasks">Blocked tasks →</h2>
         ${blockedT.length ? taskTable(blockedT, true) : '<div class="empty">Nothing blocked</div>'}
       </div>
     </div>

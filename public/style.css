@@ -206,6 +206,8 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 .kpi .l   { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
 .kpi.warn .n { color: var(--red); }
 .kpi.ok   .n { color: var(--green); }
+.kpi.clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.12s; }
+.kpi.clickable:hover { box-shadow: 0 4px 16px rgba(26,40,64,.12); transform: translateY(-2px); }
 
 /* ── Progress bar ───────────────────────────────────────────────────────────── */
 .progress   { height: 6px; background: var(--grey-s); border-radius: 99px; overflow: hidden; min-width: 70px; }
