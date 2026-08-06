@@ -294,7 +294,9 @@ async function doLogin(e) {
   btn.disabled = true;
   btn.textContent = 'Signing in…';
   try {
-    const { token, user } = await api('POST', '/auth/login', { email, password: pass });
+    const result = await api('POST', '/auth/login', { email, password: pass });
+    if (!result) { err.textContent = 'Incorrect email or password. Please try again.'; return; }
+    const { token, user } = result;
     G.token = token;
     G.me    = user;
     localStorage.setItem('vv_token', token);
