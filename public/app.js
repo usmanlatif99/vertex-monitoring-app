@@ -795,7 +795,7 @@ async function renderDashboard() {
         <h2 style="margin-bottom:10px;cursor:pointer" onclick="go('dailylogs')" title="View daily logs">Not yet logged today →</h2>
         ${notLogged.map(u => `
           <div class="name-dot" style="padding:7px 0;border-bottom:1px solid var(--line)">
-            <span class="dot" style="background:${u.company === 'VTX' ? 'var(--amber)' : u.company === 'VSN' ? 'var(--accent)' : 'var(--green)'}"></span>
+            <span class="dot" style="background:var(--red)"></span>
             <div>
               <div style="font-size:13.5px;font-weight:500">${esc(u.name)}</div>
               <div class="small muted">${esc(u.department || '')} · ${u.company === 'VTX' ? 'Vertex' : u.company === 'VSN' ? 'Vision' : 'Both'}</div>
