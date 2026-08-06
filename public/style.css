@@ -46,24 +46,40 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────────── */
-#login {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, #1a2840 0%, #0f1e30 100%);
-  padding: 20px;
+/* ── Login / Force-change split screen ──────────────────────────────────────── */
+#login, #force-change {
+  min-height: 100vh; display: flex; align-items: stretch; padding: 0; background: #fff;
+}
+.login-left {
+  flex: 0 0 460px; display: flex; align-items: center; justify-content: center;
+  padding: 48px 40px; background: #fff;
+}
+.login-right {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 40px;
+  background: linear-gradient(160deg, #0d1f35 0%, #091525 100%);
+  position: relative; overflow: hidden;
+}
+.login-right::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 70% 30%, rgba(0,119,182,.18) 0%, transparent 65%);
+  pointer-events: none;
 }
 .login-card {
-  background: #fff;
-  border-radius: 14px;
-  padding: 40px;
-  width: 420px;
-  max-width: 100%;
-  box-shadow: 0 24px 60px rgba(0,0,0,.32);
+  width: 100%; max-width: 360px;
+  background: transparent; border-radius: 0; padding: 0; box-shadow: none;
 }
-.login-card h1  { margin: 20px 0 5px; font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
+.login-card h1  { margin: 18px 0 5px; font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
 .login-card .sub{ color: var(--ink-soft); font-size: 13.5px; line-height: 1.55; }
+.login-brand { text-align: center; margin-bottom: 32px; }
+.login-brand h2 { color: #fff; font-size: 26px; font-weight: 700; margin: 16px 0 6px; letter-spacing: -.4px; }
+.login-brand p  { color: rgba(255,255,255,.55); font-size: 13.5px; line-height: 1.6; max-width: 300px; margin: 0 auto; }
+.login-companies { margin-top: 36px; color: rgba(255,255,255,.3); font-size: 12px; text-align: center; }
+@media (max-width: 860px) {
+  .login-right { display: none; }
+  .login-left  { flex: 1; background: linear-gradient(145deg,#1a2840,#0f1e30); padding: 24px; }
+  .login-card  { background:#fff; border-radius:14px; padding:36px; box-shadow:0 24px 60px rgba(0,0,0,.35); max-width:420px; }
+}
 
 /* ── Header ────────────────────────────────────────────────────────────────── */
 header {
