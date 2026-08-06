@@ -223,6 +223,12 @@ function prPill(t) {
 function stPill(t) {
   return `<span class="pill s-${t.status}">${ST_LABEL[t.status] || t.status}</span>`;
 }
+function progressColor(t) {
+  if (t.status === 'completed') return 'var(--green)';
+  if (t.status === 'blocked')   return 'var(--red)';
+  return 'var(--accent)';
+}
+
 function duePill(t) {
   if (!t.due_date) return '<span class="due">No deadline</span>';
   const od = isOverdue(t);
@@ -272,7 +278,7 @@ function taskTable(tasks, showWho) {
       <td>${prPill(t)}</td>
       <td>${stPill(t)}</td>
       <td>${duePill(t)}</td>
-      <td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:${taskPct(t)}%"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">${taskPct(t)}%</span></div></td>
+      <td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:${taskPct(t)}%;background:${progressColor(t)}"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">${taskPct(t)}%</span></div></td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }
