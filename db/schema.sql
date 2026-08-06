@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS task_comments (
 ALTER TABLE daily_logs       ADD COLUMN IF NOT EXISTS ad_hoc_title VARCHAR(200);
 ALTER TABLE task_comments    ADD COLUMN IF NOT EXISTS parent_id   INTEGER REFERENCES task_comments(id);
 ALTER TABLE task_attachments ADD COLUMN IF NOT EXISTS comment_id  INTEGER REFERENCES task_comments(id) ON DELETE CASCADE;
-ALTER TABLE tasks            ADD COLUMN IF NOT EXISTS archived    BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tasks            ADD COLUMN IF NOT EXISTS archived              BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users            ADD COLUMN IF NOT EXISTS must_change_password  BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id         SERIAL      PRIMARY KEY,

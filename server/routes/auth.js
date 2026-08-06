@@ -36,11 +36,29 @@ router.post('/login', async (req, res) => {
 router.get('/me', auth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      'SELECT id, name, email, role, company, department FROM users WHERE id = $1 AND active = true',
+      'SELECT id, name, email, role, company, department, must_change_password FROM users WHERE id = $1 AND active = true',
       [req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
     res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/force-change-password', auth, async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    await db.query(
+      'UPDATE users SET password_hash=$1, must_change_password=false WHERE id=$2',
+      [hash, req.user.id]
+    );
+    res.json({ ok: true });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

@@ -311,8 +311,31 @@ function doLogout() {
   G.token = null;
   G.me    = null;
   localStorage.removeItem('vv_token');
-  document.getElementById('app').style.display   = 'none';
-  document.getElementById('login').style.display = 'flex';
+  document.getElementById('app').style.display          = 'none';
+  document.getElementById('force-change').style.display = 'none';
+  document.getElementById('login').style.display        = 'flex';
+}
+
+async function submitForceChange(e) {
+  e.preventDefault();
+  const pass    = document.getElementById('fc-pass').value;
+  const confirm = document.getElementById('fc-confirm').value;
+  const err     = document.getElementById('fc-err');
+  const btn     = document.getElementById('fc-btn');
+  err.textContent = '';
+  if (pass.length < 6) { err.textContent = 'Password must be at least 6 characters'; return; }
+  if (pass !== confirm) { err.textContent = 'Passwords do not match'; return; }
+  btn.disabled    = true;
+  btn.textContent = 'Saving…';
+  try {
+    await api('POST', '/auth/force-change-password', { password: pass });
+    G.me.must_change_password = false;
+    initApp();
+  } catch (ex) {
+    err.textContent = ex.message;
+    btn.disabled    = false;
+    btn.textContent = 'Set password & continue';
+  }
 }
 
 async function checkAuth() {
@@ -401,8 +424,15 @@ async function submitResetPassword(token) {
 }
 
 function initApp() {
-  document.getElementById('login').style.display = 'none';
-  document.getElementById('app').style.display   = 'block';
+  if (G.me.must_change_password) {
+    document.getElementById('login').style.display        = 'none';
+    document.getElementById('app').style.display          = 'none';
+    document.getElementById('force-change').style.display = 'flex';
+    return;
+  }
+  document.getElementById('force-change').style.display = 'none';
+  document.getElementById('login').style.display        = 'none';
+  document.getElementById('app').style.display          = 'block';
 
   const adminViews = ['dashboard','team','assign','dailylogs','users','myday','password','editTask','archived'];
   const empViews   = ['myday','mytasks','history','password'];

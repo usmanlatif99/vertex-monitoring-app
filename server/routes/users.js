@@ -32,9 +32,9 @@ router.post('/', auth, adminOnly, async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await db.query(
-      `INSERT INTO users (name, email, password_hash, role, company, department)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING id, name, email, role, company, department, active`,
+      `INSERT INTO users (name, email, password_hash, role, company, department, must_change_password)
+       VALUES ($1,$2,$3,$4,$5,$6, true)
+       RETURNING id, name, email, role, company, department, active, must_change_password`,
       [name.trim(), email.toLowerCase().trim(), hash, role, company, department || null]
     );
     res.status(201).json(rows[0]);
