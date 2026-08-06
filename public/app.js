@@ -229,6 +229,25 @@ function duePill(t) {
   return `<span class="due${od ? ' over' : ''}">${od ? '⚠ ' : ''}${fmt(t.due_date)}</span>`;
 }
 
+// ── Dashboard compact task list ────────────────────────────────────────────────
+function dashTaskList(tasks) {
+  if (!tasks.length) return '<div class="empty">None</div>';
+  return tasks.map(t => `
+    <div class="dash-task-row" onclick="openTask(${t.id})">
+      <div class="dash-task-left">
+        ${codeChip(t)}
+        <div class="dash-task-info">
+          <div class="dash-task-title">${esc(t.title)}</div>
+          <div class="dash-task-sub">${esc(t.assignee_name || '—')} · ${esc(t.assignee_dept || '')}</div>
+        </div>
+      </div>
+      <div class="dash-task-right">
+        ${stPill(t)}
+        ${duePill(t)}
+      </div>
+    </div>`).join('');
+}
+
 // ── Task table ─────────────────────────────────────────────────────────────────
 function taskTable(tasks, showWho) {
   if (!tasks.length) return '<div class="empty">No tasks found</div>';
@@ -798,11 +817,11 @@ async function renderDashboard() {
     <div>
       <div class="card" style="margin-bottom:16px">
         <h2 style="margin-bottom:10px;cursor:pointer" onclick="dashFilter('overdue')" title="View all overdue tasks">⚠ Overdue tasks →</h2>
-        ${overdueT.length ? taskTable(overdueT, true) : '<div class="empty">No overdue tasks</div>'}
+        ${overdueT.length ? dashTaskList(overdueT) : '<div class="empty">No overdue tasks</div>'}
       </div>
       <div class="card">
         <h2 style="margin-bottom:10px;cursor:pointer" onclick="dashFilter('blocked')" title="View all blocked tasks">Blocked tasks →</h2>
-        ${blockedT.length ? taskTable(blockedT, true) : '<div class="empty">Nothing blocked</div>'}
+        ${blockedT.length ? dashTaskList(blockedT) : '<div class="empty">Nothing blocked</div>'}
       </div>
     </div>
   </div>`;

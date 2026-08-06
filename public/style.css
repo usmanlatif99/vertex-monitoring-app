@@ -209,6 +209,18 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 .kpi.clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.12s; }
 .kpi.clickable:hover { box-shadow: 0 4px 16px rgba(26,40,64,.12); transform: translateY(-2px); }
 
+/* ── Dashboard compact task rows ────────────────────────────────────────────── */
+.dash-task-row { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                 padding:9px 0; border-bottom:1px solid var(--line); cursor:pointer;
+                 transition:background .12s; border-radius:4px; }
+.dash-task-row:last-child { border-bottom:none; }
+.dash-task-row:hover { background:var(--grey-s); padding-left:6px; padding-right:6px; margin:0 -6px; }
+.dash-task-left  { display:flex; align-items:center; gap:10px; min-width:0; flex:1; }
+.dash-task-info  { min-width:0; }
+.dash-task-title { font-size:13.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:320px; }
+.dash-task-sub   { font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+.dash-task-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
 /* ── Progress bar ───────────────────────────────────────────────────────────── */
 .progress   { height: 6px; background: var(--grey-s); border-radius: 99px; overflow: hidden; min-width: 70px; }
 .progress i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s; }
