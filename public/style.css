@@ -76,47 +76,22 @@ input:focus, select:focus, textarea:focus {
 .login-brand p  { color: rgba(255,255,255,.55); font-size: 13.5px; line-height: 1.6; max-width: 300px; margin: 0 auto; }
 .login-companies { margin-top: 36px; color: rgba(255,255,255,.3); font-size: 12px; text-align: center; }
 @media (max-width: 860px) {
-  #login, #force-change { background: #fff; }
-  .login-right { display: none; }
-  .login-left  {
-    flex: 1;
-    background: #fff;
-    padding: 0;
-    align-items: stretch;
-    justify-content: flex-start;
-    min-height: 100vh;
-    flex-direction: column;
-  }
-  .login-card  {
-    background: transparent;
-    border-radius: 0;
-    padding: 0 28px 40px;
-    box-shadow: none;
-    max-width: 100%;
-    width: 100%;
-    flex: 1;
-  }
-  /* Blue banner at top */
-  .login-left::before {
-    content: '';
-    display: block;
-    height: 200px;
-    background: linear-gradient(160deg, #0d1f35 0%, #1089cc 100%);
-    border-radius: 0 0 32px 32px;
-    flex-shrink: 0;
-    margin-bottom: -60px;
-  }
-  .login-card img {
-    display: block;
-    margin: 0 auto 12px;
-    position: relative;
-    z-index: 1;
-    border: 3px solid #fff;
-    border-radius: 8px !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,.25);
-  }
-  .login-card h1 { font-size: 22px; text-align: center; margin-top: 8px; }
-  .login-card .sub { text-align: center; }
+  /* Keep horizontal side-by-side layout, just scale content down */
+  #login, #force-change { flex-direction: row; }
+  .login-left  { flex: 0 0 48%; padding: 20px 16px; }
+  .login-right { flex: 1; padding: 20px 12px; }
+  .login-card  { max-width: 100%; }
+  .login-card h1      { font-size: 15px; margin: 10px 0 3px; }
+  .login-card .sub    { font-size: 11px; }
+  .login-card img     { height: 36px !important; }
+  .login-brand h2     { font-size: 16px; margin: 8px 0 4px; }
+  .login-brand p      { font-size: 11px; }
+  .login-brand img    { height: 32px !important; }
+  .login-companies    { font-size: 10px; margin-top: 12px; }
+  .login-right svg    { max-width: 100%; }
+  .fld label          { font-size: 10px; }
+  .fld input          { font-size: 12px; padding: 7px 10px; }
+  #l-btn, #fc-btn     { font-size: 12px !important; padding: 9px 12px !important; }
 }
 
 /* ── Header ────────────────────────────────────────────────────────────────── */
