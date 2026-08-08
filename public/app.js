@@ -440,8 +440,9 @@ function initApp() {
   document.getElementById('app').style.display          = 'block';
 
   const adminViews = ['dashboard','team','assign','dailylogs','users','attendance','myday','password','editTask','archived'];
+  // TESTING PAUSE: 'attendance' removed from empViews — add back to both branches to re-enable for employees
   const empViews   = G.me.attendance_enabled
-    ? ['myday','mytasks','history','attendance','password']
+    ? ['myday','mytasks','history','password']
     : ['myday','mytasks','history','password'];
   const validViews = G.me.role === 'admin' ? adminViews : empViews;
   const hash       = location.hash.slice(1);
