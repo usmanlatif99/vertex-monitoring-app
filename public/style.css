@@ -191,6 +191,8 @@ body.nav-open .nav-backdrop { display: block; }
 .btn-ghost:hover { border-color: var(--ink-soft); background: #f7f9fc; }
 .btn-sm     { padding: 5px 12px; font-size: 12.5px; }
 .btn-red    { background: var(--red); color: #fff; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
 
 /* ── Chips & Pills ─────────────────────────────────────────────────────────── */
 .code      { font-family: var(--mono); font-size: 12px; font-weight: 600;

@@ -71,6 +71,35 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
   }
 });
 
+// Delete user (hard-delete; blocked if user has tasks or logs)
+router.delete('/:id', auth, adminOnly, async (req, res) => {
+  const uid = parseInt(req.params.id, 10);
+  if (uid === req.user.id) {
+    return res.status(400).json({ error: 'You cannot delete your own account.' });
+  }
+  try {
+    const { rows: refs } = await db.query(
+      `SELECT
+         (SELECT COUNT(*) FROM tasks      WHERE assignee_id=$1 OR created_by=$1) AS task_count,
+         (SELECT COUNT(*) FROM daily_logs WHERE user_id=$1)                       AS log_count,
+         (SELECT COUNT(*) FROM task_comments WHERE user_id=$1)                   AS comment_count`,
+      [uid]
+    );
+    const { task_count, log_count, comment_count } = refs[0];
+    if (+task_count + +log_count + +comment_count > 0) {
+      return res.status(409).json({
+        error: `Cannot delete: this user has ${task_count} task(s), ${log_count} log(s), and ${comment_count} comment(s). Deactivate them instead.`
+      });
+    }
+    const { rowCount } = await db.query('DELETE FROM users WHERE id=$1', [uid]);
+    if (!rowCount) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Change own password
 router.put('/me/password', auth, async (req, res) => {
   const { current_password, new_password } = req.body;

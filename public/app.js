@@ -1035,16 +1035,24 @@ async function renderUsers() {
   <div class="pagehead">
     <div><h1>Manage users</h1>
     <div class="sub">${users.filter(u => u.active).length} active · ${users.filter(u => !u.active).length} inactive</div></div>
-    <button class="btn btn-amber" onclick="showUserForm()">+ Add user</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div id="user-bulk-bar" style="display:none;align-items:center;gap:8px">
+        <span id="user-sel-count" class="small muted"></span>
+        <button class="btn btn-danger btn-sm" onclick="deleteSelectedUsers()">Delete selected</button>
+      </div>
+      <button class="btn btn-amber" onclick="showUserForm()">+ Add user</button>
+    </div>
   </div>
   <div id="user-form-panel"></div>
-  <div class="table-wrap"><table>
+  <div class="table-wrap"><table id="users-table">
     <thead><tr>
+      <th style="width:36px"><input type="checkbox" id="user-sel-all" onclick="usersToggleAll(this)" title="Select all"></th>
       <th>Name</th><th>Email</th><th>Company</th><th>Department</th><th>Role</th><th>Status</th>
       <th title="Enable / disable attendance marking for this employee">Attendance</th><th></th>
     </tr></thead>
     <tbody>
-    ${users.map(u => `<tr>
+    ${users.map(u => `<tr data-uid="${u.id}">
+      <td><input type="checkbox" class="user-sel-cb" value="${u.id}" onchange="usersOnCheck()"></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="avatar-sm">${initials(u.name)}</div>
@@ -1067,6 +1075,42 @@ async function renderUsers() {
       <td><button class="btn btn-ghost btn-sm" onclick="showUserForm(${u.id})">Edit</button></td>
     </tr>`).join('')}
     </tbody></table></div>`;
+}
+
+function usersOnCheck() {
+  const cbs   = [...document.querySelectorAll('.user-sel-cb')];
+  const sel   = cbs.filter(c => c.checked);
+  const bar   = document.getElementById('user-bulk-bar');
+  const count = document.getElementById('user-sel-count');
+  const all   = document.getElementById('user-sel-all');
+  bar.style.display   = sel.length ? 'flex' : 'none';
+  count.textContent   = `${sel.length} selected`;
+  all.indeterminate   = sel.length > 0 && sel.length < cbs.length;
+  all.checked         = sel.length === cbs.length;
+}
+
+function usersToggleAll(masterCb) {
+  document.querySelectorAll('.user-sel-cb').forEach(c => { c.checked = masterCb.checked; });
+  usersOnCheck();
+}
+
+async function deleteSelectedUsers() {
+  const ids = [...document.querySelectorAll('.user-sel-cb:checked')].map(c => +c.value);
+  if (!ids.length) return;
+  const names = ids.map(id => (window._usersData || []).find(u => u.id === id)?.name || id).join(', ');
+  if (!confirm(`Permanently delete ${ids.length} user(s)?\n\n${names}\n\nThis cannot be undone. Users with tasks or logs cannot be deleted (you will be told to deactivate them instead).`)) return;
+
+  const errors = [];
+  for (const id of ids) {
+    try {
+      await api('DELETE', `/users/${id}`);
+    } catch (e) {
+      const u = (window._usersData || []).find(x => x.id === id);
+      errors.push(`${u?.name || id}: ${e.message}`);
+    }
+  }
+  await renderUsers();
+  if (errors.length) alert('Some users could not be deleted:\n\n' + errors.join('\n'));
 }
 
 function showUserForm(userId) {
