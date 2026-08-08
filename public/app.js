@@ -2614,8 +2614,9 @@ async function renderAttAdminMonthly() {
       </div>`;
   }
 
-  const vtx = data.filter(u => u.company === 'VTX');
-  const vsn = data.filter(u => u.company === 'VSN');
+  const vtx   = data.filter(u => u.company === 'VTX');
+  const vsn   = data.filter(u => u.company === 'VSN');
+  const other = data.filter(u => u.company !== 'VTX' && u.company !== 'VSN');
 
   body.innerHTML = `
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
@@ -2624,12 +2625,14 @@ async function renderAttAdminMonthly() {
     <button class="btn btn-ghost btn-sm" ${month >= TODAY().slice(0,7) ? 'disabled' : ''} onclick="G._attAdminMonth='${attNextMonth(month)}';renderAttAdminMonthly()">Next →</button>
     <button class="btn btn-amber btn-sm" style="margin-left:auto" onclick="attAdminExport()">Export PDF</button>
   </div>
-  ${vtx.length ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildMonthTable(vtx)}</div>` : ''}
-  ${vsn.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildMonthTable(vsn)}</div>` : ''}
+  ${vtx.length   ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildMonthTable(vtx)}</div>` : ''}
+  ${vsn.length   ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildMonthTable(vsn)}</div>` : ''}
+  ${other.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">All Companies</div>${buildMonthTable(other)}</div>` : ''}
   ${!data.length ? '<div class="card"><div class="empty">No employees with attendance enabled.</div></div>' : ''}
   <div class="att-monthly-legend">
     <span><span class="att-cal-td att-cal-td-present att-legend-cell-sm"></span>Present</span>
     <span><span class="att-cal-td att-cal-td-late att-legend-cell-sm"></span>Late</span>
+    <span><span class="att-cal-td att-cal-td-halfday att-legend-cell-sm"></span>Half Day</span>
     <span><span class="att-cal-td att-cal-td-absent att-legend-cell-sm"></span>Absent</span>
     <span><span class="att-cal-td att-cal-td-pending att-legend-cell-sm"></span>Pending</span>
     <span><span class="att-cal-td att-cal-td-off att-legend-cell-sm"></span>Weekend</span>
@@ -2819,12 +2822,13 @@ function attAdminExport() {
       table { border-collapse: collapse; width: 100%; font-size: 11px; }
       th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; white-space: nowrap; }
       th { background: #f5f5f5; font-weight: 700; }
-      .att-cal-td-present { background: #d1fae5; }
-      .att-cal-td-late    { background: #fef3c7; }
-      .att-cal-td-absent  { background: #fee2e2; }
-      .att-cal-td-off     { background: #f0f0f0; color: #999; }
-      .att-cal-td-pending { background: #e0e7ff; }
-      .att-cal-td-future  { background: #f9fafb; }
+      .att-cal-td-present  { background: #d1fae5; }
+      .att-cal-td-late     { background: #fef3c7; }
+      .att-cal-td-halfday  { background: #ddd6fe; }
+      .att-cal-td-absent   { background: #fee2e2; }
+      .att-cal-td-off      { background: #f0f0f0; color: #999; }
+      .att-cal-td-pending  { background: #e0e7ff; }
+      .att-cal-td-future   { background: #f9fafb; }
       .att-company-block  { margin-bottom: 24px; }
       .att-company-title  { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
       @media print { body { margin: 10mm; } }
