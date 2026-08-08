@@ -499,3 +499,28 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 }
 .att-toggle input:checked + .att-toggle-slider { background:var(--green); }
 .att-toggle input:checked + .att-toggle-slider:before { transform:translateX(18px); }
+
+/* Pending approval cards */
+.att-pend-card {
+  border: 1px solid var(--line); border-radius: 10px;
+  margin-bottom: 14px; overflow: hidden;
+}
+.att-pend-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+  padding: 14px 16px; background: var(--grey-s);
+  border-bottom: 1px solid var(--line);
+}
+.att-pend-rows { padding: 4px 0; }
+.att-pend-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+}
+.att-pend-item:last-child { border-bottom: none; }
+.att-pend-item-ok { opacity: .75; }
+.att-pend-item-label { display: flex; align-items: center; flex-wrap: wrap; }
+.att-pend-reason {
+  font-size: 13px; color: var(--ink-soft); font-style: italic;
+  margin-top: 2px; padding-left: 4px;
+  border-left: 3px solid var(--line);
+}

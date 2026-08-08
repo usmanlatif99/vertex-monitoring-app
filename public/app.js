@@ -2632,31 +2632,61 @@ async function renderAttAdminPending() {
 
   body.innerHTML = `
   <div class="card">
-    <h2 style="margin-bottom:14px">Pending Approvals (${rows.length})</h2>
-    <div style="overflow-x:auto"><table class="att-table">
-      <thead><tr>
-        <th>Employee</th><th>Company</th><th>Date</th><th>Type</th>
-        <th>Check In</th><th>Check Out</th><th>Reason</th><th>Actions</th>
-      </tr></thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr id="att-pend-row-${r.id}">
-            <td style="font-weight:500">${esc(r.user_name)}</td>
-            <td class="muted small">${r.company === 'VTX' ? 'Vertex' : 'Vision'}</td>
-            <td>${fmt(r.date)}</td>
-            <td class="muted small">${esc(r.check_in_type)}${r.check_out_type ? ' / ' + esc(r.check_out_type) : ''}</td>
-            <td>${attFmtTime(r.check_in_at)}</td>
-            <td>${attFmtTime(r.check_out_at)}</td>
-            <td class="muted small" style="max-width:200px">${esc(r.checkout_remark || '—')}</td>
-            <td style="white-space:nowrap">
-              <button class="btn btn-sm" style="background:var(--green);color:#fff;margin-right:6px"
-                onclick="attApprove(${r.id},'approve')">Approve</button>
-              <button class="btn btn-sm" style="background:var(--red);color:#fff"
-                onclick="attApprove(${r.id},'reject')">Reject</button>
-            </td>
-          </tr>`).join('')}
-      </tbody>
-    </table></div>
+    <h2 style="margin-bottom:4px">Pending Approvals (${rows.length})</h2>
+    <div class="muted small" style="margin-bottom:16px">Review each request — check-in and check-out are shown separately where both are pending.</div>
+    ${rows.map(r => {
+      const coName = r.company === 'VTX' ? 'Vertex' : r.company === 'VSN' ? 'Vision' : r.company;
+      const hasCheckinPending  = r.check_in_type === 'manual';
+      const hasCheckoutPending = r.check_out_type === 'out_of_office' || r.check_out_type === 'manual';
+      return `
+      <div class="att-pend-card" id="att-pend-row-${r.id}">
+        <div class="att-pend-header">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="avatar-sm" style="font-size:12px">${initials(r.user_name)}</div>
+            <div>
+              <div style="font-weight:600;font-size:14px">${esc(r.user_name)}</div>
+              <div class="muted small">${esc(coName)} · ${fmt(r.date)}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm" style="background:var(--green);color:#fff"
+              onclick="attApprove(${r.id},'approve')">Approve All</button>
+            <button class="btn btn-sm" style="background:var(--red);color:#fff"
+              onclick="attApprove(${r.id},'reject')">Reject All</button>
+          </div>
+        </div>
+        <div class="att-pend-rows">
+          ${hasCheckinPending ? `
+          <div class="att-pend-item">
+            <div class="att-pend-item-label">
+              <span class="att-badge att-pending" style="font-size:11px">Check-In</span>
+              <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
+              <span class="muted small" style="margin-left:6px">(manual)</span>
+            </div>
+            ${r.checkin_remark ? `<div class="att-pend-reason">"${esc(r.checkin_remark)}"</div>` : ''}
+          </div>` : `
+          <div class="att-pend-item att-pend-item-ok">
+            <span style="color:var(--green);font-size:13px">✓ Check-In verified by GPS</span>
+            <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
+          </div>`}
+          ${r.check_out_at ? `
+          <div class="att-pend-item${hasCheckoutPending ? '' : ' att-pend-item-ok'}">
+            <div class="att-pend-item-label">
+              ${hasCheckoutPending
+                ? `<span class="att-badge att-pending" style="font-size:11px">Check-Out</span>`
+                : `<span style="color:var(--green);font-size:13px">✓ Check-Out</span>`}
+              <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_out_at)}</span>
+              <span class="muted small" style="margin-left:6px">(${esc(r.check_out_type || '')})</span>
+            </div>
+            ${r.checkout_remark ? `<div class="att-pend-reason">"${esc(r.checkout_remark)}"</div>` : ''}
+          </div>` : `
+          <div class="att-pend-item" style="color:var(--ink-soft);font-size:13px">
+            — Employee has not checked out yet
+          </div>`}
+        </div>
+        ${r.admin_note ? `<div class="muted small" style="padding:8px 14px;border-top:1px solid var(--line)">Admin note: ${esc(r.admin_note)}</div>` : ''}
+      </div>`;
+    }).join('')}
   </div>`;
 }
 

@@ -119,11 +119,11 @@ router.post('/checkin', auth, async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO attendance
          (user_id, date, check_in_at, check_in_lat, check_in_lng,
-          status, check_in_type, checkout_remark, approval_status)
+          status, check_in_type, checkin_remark, approval_status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (user_id, date) DO UPDATE
          SET check_in_at = $3, check_in_lat = $4, check_in_lng = $5,
-             status = $6, check_in_type = $7, checkout_remark = $8, approval_status = $9
+             status = $6, check_in_type = $7, checkin_remark = $8, approval_status = $9
        RETURNING *`,
       [req.user.id, today, now, lat || null, lng || null,
        status, checkInType, remark || null, approvalStatus]

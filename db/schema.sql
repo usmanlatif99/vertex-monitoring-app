@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE(user_id, date)
 );
 
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS checkin_remark TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_att_user_date ON attendance(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_att_date      ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_pending   ON attendance(approval_status) WHERE approval_status = 'pending';
