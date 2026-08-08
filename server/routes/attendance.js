@@ -20,12 +20,18 @@ function haversineM(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function isLate(ts) {
-  // After 9:35 AM PKT (UTC+5)
+function getCheckinStatus(ts) {
+  // Returns 'present' | 'late' | 'halfday' based on PKT time
+  const pkt  = new Date(new Date(ts).getTime() + 5 * 3600 * 1000);
+  const mins = pkt.getUTCHours() * 60 + pkt.getUTCMinutes();
+  if (mins >= 11 * 60)          return 'halfday'; // 11:00 AM or later
+  if (mins > 9 * 60 + 35)      return 'late';    // after 9:35 AM
+  return 'present';
+}
+
+function pktMinutes(ts) {
   const pkt = new Date(new Date(ts).getTime() + 5 * 3600 * 1000);
-  const h = pkt.getUTCHours();
-  const m = pkt.getUTCMinutes();
-  return h > 9 || (h === 9 && m > 35);
+  return pkt.getUTCHours() * 60 + pkt.getUTCMinutes();
 }
 
 function todayPKT() {
@@ -94,6 +100,12 @@ router.post('/checkin', auth, async (req, res) => {
       return res.status(409).json({ error: 'Already checked in today' });
     }
 
+    // Enforce check-in window: 7:00 AM – no upper limit (after 11 AM = halfday)
+    const nowMins = pktMinutes(now);
+    if (nowMins < 7 * 60) {
+      return res.status(400).json({ error: 'Check-in is not allowed before 7:00 AM. Office opens at 7:00 AM.' });
+    }
+
     const checkInType = type || 'location';
     let approvalStatus = 'approved';
     let distance = null;
@@ -105,7 +117,7 @@ router.post('/checkin', auth, async (req, res) => {
       distance = haversineM(OFFICE_LAT, OFFICE_LNG, parseFloat(lat), parseFloat(lng));
       if (distance > ALLOWED_M) {
         return res.status(400).json({
-          error: `You are ${Math.round(distance)}m from office (limit: ${ALLOWED_M}m). Use out-of-office option if you are working remotely.`,
+          error: `You are ${Math.round(distance)}m from office (limit: ${ALLOWED_M}m). Use manual check-in if your GPS is not working.`,
         });
       }
     } else if (checkInType === 'manual') {
@@ -114,7 +126,7 @@ router.post('/checkin', auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid check-in type' });
     }
 
-    const status = isLate(now) ? 'late' : 'present';
+    const status = getCheckinStatus(now);
 
     const { rows } = await db.query(
       `INSERT INTO attendance
@@ -258,14 +270,16 @@ router.get('/admin/monthly', auth, adminOnly, async (req, res) => {
     records.forEach(r => { (byUser[r.user_id] = byUser[r.user_id] || []).push(r); });
 
     const result = users.map(u => {
-      const recs    = byUser[u.id] || [];
+      const recs     = byUser[u.id] || [];
       const approved = recs.filter(r => r.approval_status === 'approved');
       const present  = approved.filter(r => r.status === 'present').length;
       const late     = approved.filter(r => r.status === 'late').length;
-      const lateAbsents = Math.floor(late / 3);
-      const rawAbsent   = Math.max(0, elapsedWork - present - late);
-      const absent      = rawAbsent + lateAbsents;
-      return { ...u, present, late, absent, lateAbsents, elapsedWork, daysInMonth, records: recs };
+      const halfday  = approved.filter(r => r.status === 'halfday').length;
+      const lateAbsents    = Math.floor(late / 3);
+      const halfdayAbsents = Math.floor(halfday / 2);
+      const rawAbsent      = Math.max(0, elapsedWork - present - late - halfday);
+      const absent         = rawAbsent + lateAbsents + halfdayAbsents;
+      return { ...u, present, late, halfday, absent, lateAbsents, halfdayAbsents, elapsedWork, daysInMonth, records: recs };
     });
     res.json(result);
   } catch (e) {

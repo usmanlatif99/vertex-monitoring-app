@@ -2033,6 +2033,7 @@ function attStatusBadge(rec) {
   if (!rec) return `<span class="att-badge att-absent">Absent</span>`;
   if (rec.approval_status === 'pending')  return `<span class="att-badge att-pending">Pending</span>`;
   if (rec.approval_status === 'rejected') return `<span class="att-badge att-rejected">Rejected</span>`;
+  if (rec.status === 'halfday') return `<span class="att-badge att-halfday">Half Day</span>`;
   if (rec.status === 'late')    return `<span class="att-badge att-late">Late</span>`;
   if (rec.status === 'present') return `<span class="att-badge att-present">Present</span>`;
   return `<span class="att-badge att-absent">Absent</span>`;
@@ -2062,6 +2063,7 @@ function attCalendarRow(records, month) {
     else if (!rec)                                   cls += ' att-cal-absent';
     else if (rec.approval_status === 'pending')      cls += ' att-cal-pending';
     else if (rec.approval_status === 'rejected')     cls += ' att-cal-rejected';
+    else if (rec.status === 'halfday')               cls += ' att-cal-halfday';
     else if (rec.status === 'late')                  cls += ' att-cal-late';
     else                                             cls += ' att-cal-present';
     if (isToday) cls += ' att-cal-today';
@@ -2091,7 +2093,9 @@ async function renderAttendance() {
   const approved  = (monthRecs || []).filter(r => r.approval_status === 'approved');
   const present   = approved.filter(r => r.status === 'present').length;
   const late      = approved.filter(r => r.status === 'late').length;
-  const lateAbsents = Math.floor(late / 3);
+  const halfday   = approved.filter(r => r.status === 'halfday').length;
+  const lateAbsents    = Math.floor(late / 3);
+  const halfdayAbsents = Math.floor(halfday / 2);
   const { y: cy, m: cm } = (() => { const [y,m] = month.split('-'); return {y,m}; })();
   const daysInMonth = new Date(parseInt(cy), parseInt(cm), 0).getDate();
   let elapsedWork = 0;
@@ -2100,17 +2104,16 @@ async function renderAttendance() {
     if (ds > today) break;
     if (new Date(ds + 'T00:00:00').getDay() !== 0) elapsedWork++;
   }
-  const absent = Math.max(0, elapsedWork - present - late) + lateAbsents;
+  const absent = Math.max(0, elapsedWork - present - late - halfday) + lateAbsents + halfdayAbsents;
 
-  // Late warning banner
-  let lateWarning = '';
-  if (late === 1) {
-    lateWarning = `<div class="att-warn">You have <b>1 late arrival</b> this month — 2 more will count as 1 absent day.</div>`;
-  } else if (late === 2) {
-    lateWarning = `<div class="att-warn att-warn-red">You have <b>2 late arrivals</b> this month — 1 more will count as 1 absent day!</div>`;
-  } else if (late >= 3) {
-    lateWarning = `<div class="att-warn att-warn-red">You have <b>${late} late arrivals</b> this month — every 3 lates = 1 absent day. You have been marked absent <b>${lateAbsents}</b> day(s) due to late arrivals.</div>`;
-  }
+  // Warning banners
+  const warnings = [];
+  if (late === 1)      warnings.push(`<div class="att-warn">You have <b>1 late arrival</b> this month — 2 more will count as 1 absent day.</div>`);
+  else if (late === 2) warnings.push(`<div class="att-warn att-warn-red">You have <b>2 late arrivals</b> this month — 1 more will count as 1 absent day!</div>`);
+  else if (late >= 3)  warnings.push(`<div class="att-warn att-warn-red">You have <b>${late} late arrivals</b> this month — every 3 lates = 1 absent day. That's <b>${lateAbsents}</b> absent day(s) from lates.</div>`);
+  if (halfday === 1)      warnings.push(`<div class="att-warn">You have <b>1 half day</b> this month — 1 more will count as 1 absent day.</div>`);
+  else if (halfday >= 2)  warnings.push(`<div class="att-warn att-warn-red">You have <b>${halfday} half days</b> this month — every 2 half days = 1 absent day. That's <b>${halfdayAbsents}</b> absent day(s) from half days.</div>`);
+  const lateWarning = warnings.join('');
 
   // Today panel
   let todayPanel = '';
@@ -2259,6 +2262,7 @@ async function renderAttendance() {
   <div class="att-stats-row">
     <div class="att-stat att-stat-present"><div class="att-stat-num">${present}</div><div class="att-stat-lbl">Present</div></div>
     <div class="att-stat att-stat-late"><div class="att-stat-num">${late}</div><div class="att-stat-lbl">Late</div></div>
+    <div class="att-stat att-stat-halfday"><div class="att-stat-num">${halfday}</div><div class="att-stat-lbl">Half Day</div></div>
     <div class="att-stat att-stat-absent"><div class="att-stat-num">${absent}</div><div class="att-stat-lbl">Absent</div></div>
     <div class="att-stat att-stat-work"><div class="att-stat-num">${elapsedWork}</div><div class="att-stat-lbl">Working days</div></div>
   </div>
@@ -2275,6 +2279,7 @@ async function renderAttendance() {
     <div class="att-cal-legend">
       <span><span class="att-cal-cell att-cal-present att-legend-cell"></span>Present</span>
       <span><span class="att-cal-cell att-cal-late att-legend-cell"></span>Late</span>
+      <span><span class="att-cal-cell att-cal-halfday att-legend-cell"></span>Half Day</span>
       <span><span class="att-cal-cell att-cal-absent att-legend-cell"></span>Absent</span>
       <span><span class="att-cal-cell att-cal-pending att-legend-cell"></span>Pending</span>
       <span><span class="att-cal-cell att-cal-off att-legend-cell"></span>Weekend</span>
@@ -2583,6 +2588,7 @@ async function renderAttAdminMonthly() {
                 else if (isFuture)                          cls += ' att-cal-td-future';
                 else if (!rec)                              cls += ' att-cal-td-absent';
                 else if (rec.approval_status === 'pending') cls += ' att-cal-td-pending';
+                else if (rec.status === 'halfday')          cls += ' att-cal-td-halfday';
                 else if (rec.status === 'late')             cls += ' att-cal-td-late';
                 else                                        cls += ' att-cal-td-present';
                 const tip = isWeekend ? '' : !rec && !isFuture ? 'Absent'
