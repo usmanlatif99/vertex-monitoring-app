@@ -2661,13 +2661,16 @@ async function renderAttAdminPending() {
             <div class="att-pend-item-label">
               <span class="att-badge att-pending" style="font-size:11px">Check-In</span>
               <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
-              <span class="muted small" style="margin-left:6px">(manual)</span>
+              <span class="muted small" style="margin-left:6px">· Manual request</span>
             </div>
-            ${r.checkin_remark ? `<div class="att-pend-reason">"${esc(r.checkin_remark)}"</div>` : ''}
+            <div class="att-pend-reason">${r.checkin_remark ? `"${esc(r.checkin_remark)}"` : '<span class="muted" style="font-style:normal">No reason provided</span>'}</div>
           </div>` : `
           <div class="att-pend-item att-pend-item-ok">
-            <span style="color:var(--green);font-size:13px">✓ Check-In verified by GPS</span>
-            <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
+            <div class="att-pend-item-label">
+              <span style="color:var(--green);font-size:13px">✓ Check-In</span>
+              <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
+              <span class="muted small" style="margin-left:6px">· GPS verified</span>
+            </div>
           </div>`}
           ${r.check_out_at ? `
           <div class="att-pend-item${hasCheckoutPending ? '' : ' att-pend-item-ok'}">
@@ -2676,11 +2679,11 @@ async function renderAttAdminPending() {
                 ? `<span class="att-badge att-pending" style="font-size:11px">Check-Out</span>`
                 : `<span style="color:var(--green);font-size:13px">✓ Check-Out</span>`}
               <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_out_at)}</span>
-              <span class="muted small" style="margin-left:6px">(${esc(r.check_out_type || '')})</span>
+              <span class="muted small" style="margin-left:6px">· ${r.check_out_type === 'out_of_office' ? 'Out of office' : r.check_out_type === 'manual' ? 'Manual request' : 'GPS verified'}</span>
             </div>
-            ${r.checkout_remark ? `<div class="att-pend-reason">"${esc(r.checkout_remark)}"</div>` : ''}
+            ${hasCheckoutPending ? `<div class="att-pend-reason">${r.checkout_remark ? `"${esc(r.checkout_remark)}"` : '<span class="muted" style="font-style:normal">No reason provided</span>'}</div>` : ''}
           </div>` : `
-          <div class="att-pend-item" style="color:var(--ink-soft);font-size:13px">
+          <div class="att-pend-item" style="color:var(--ink-soft);font-size:13px;padding:10px 16px">
             — Employee has not checked out yet
           </div>`}
         </div>
