@@ -153,9 +153,6 @@ router.post('/checkout', auth, async (req, res) => {
     if (rec.check_out_at) {
       return res.status(409).json({ error: 'Already checked out today' });
     }
-    if (rec.approval_status === 'pending') {
-      return res.status(400).json({ error: 'Your check-in is pending admin approval — cannot check out yet' });
-    }
 
     const checkOutType = type || 'location';
     let approvalStatus = 'approved';

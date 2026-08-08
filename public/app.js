@@ -2142,16 +2142,39 @@ async function renderAttendance() {
       </div>`;
   } else if (todayRec.approval_status === 'pending' && !todayRec.check_out_at) {
     todayPanel = `
-      <div class="att-checkin-card att-card-pending">
+      <div class="att-checkin-card att-card-pending" id="att-checkin-card">
         <div class="att-pending-msg">
-          <span class="att-badge att-pending" style="font-size:13px;padding:4px 12px">Pending approval</span>
-          <span style="margin-left:10px;font-size:13.5px">Your manual check-in for today is awaiting admin approval.</span>
+          <span class="att-badge att-pending" style="font-size:13px;padding:4px 12px">Check-in pending approval</span>
+          <span style="margin-left:10px;font-size:13.5px">Your manual check-in is awaiting admin approval.</span>
         </div>
-        <div class="att-time-row" style="margin-top:10px">
+        <div class="att-time-row" style="margin-top:8px">
           <span class="muted small">Submitted at</span>
-          <span>${attFmtTime(todayRec.check_in_at)}</span>
+          <span style="margin-left:8px">${attFmtTime(todayRec.check_in_at)}</span>
         </div>
-        ${todayRec.checkout_remark ? `<div class="att-remark muted small" style="margin-top:6px">"${esc(todayRec.checkout_remark)}"</div>` : ''}
+        ${todayRec.checkout_remark ? `<div class="att-remark muted small" style="margin-top:4px">"${esc(todayRec.checkout_remark)}"</div>` : ''}
+        <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+          <div class="muted small" style="margin-bottom:10px">You can still check out — admin will review both together.</div>
+          <div class="att-checkin-status" id="att-loc-status">
+            <div class="att-loc-icon">📍</div>
+            <div id="att-loc-text" class="muted">Checking your location…</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+            <button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">
+              Check Out
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Out of Office Check-Out</button>
+          </div>
+          <div id="att-ooo-form" style="display:none;margin-top:12px">
+            <div class="fld">
+              <label>Reason for out-of-office checkout (required)</label>
+              <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for appointment"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
+              <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
+            </div>
+          </div>
+        </div>
       </div>`;
   } else if (todayRec.check_in_at && !todayRec.check_out_at) {
     todayPanel = `
