@@ -2061,14 +2061,14 @@ function attCalendarRow(records, month) {
     const isToday   = ds === today;
 
     let cls = 'att-cal-cell';
-    if (isWeekend)                                   cls += ' att-cal-off';
-    else if (isFuture)                               cls += ' att-cal-future';
-    else if (!rec)                                   cls += ' att-cal-absent';
-    else if (rec.approval_status === 'pending')      cls += ' att-cal-pending';
-    else if (rec.approval_status === 'rejected')     cls += ' att-cal-rejected';
-    else if (rec.status === 'halfday')               cls += ' att-cal-halfday';
-    else if (rec.status === 'late')                  cls += ' att-cal-late';
-    else                                             cls += ' att-cal-present';
+    if (isFuture)                                                              cls += ' att-cal-future';
+    else if (rec && rec.approval_status === 'pending')                         cls += ' att-cal-pending';
+    else if (rec && rec.approval_status === 'rejected')                        cls += ' att-cal-rejected';
+    else if (rec && rec.approval_status === 'approved' && rec.status === 'halfday') cls += ' att-cal-halfday';
+    else if (rec && rec.approval_status === 'approved' && rec.status === 'late')    cls += ' att-cal-late';
+    else if (rec && rec.approval_status === 'approved')                        cls += ' att-cal-present';
+    else if (isWeekend)                                                        cls += ' att-cal-off';
+    else                                                                       cls += ' att-cal-absent';
     if (isToday) cls += ' att-cal-today';
 
     const title = isWeekend ? 'Weekend' : !rec && !isFuture ? 'Absent'
@@ -2587,13 +2587,13 @@ async function renderAttAdminMonthly() {
                 const isFuture  = ds > today;
                 const isWeekend = dow === 0;
                 let cls = 'att-cal-td';
-                if (isWeekend)                              cls += ' att-cal-td-off';
-                else if (isFuture)                          cls += ' att-cal-td-future';
-                else if (!rec)                              cls += ' att-cal-td-absent';
-                else if (rec.approval_status === 'pending') cls += ' att-cal-td-pending';
-                else if (rec.status === 'halfday')          cls += ' att-cal-td-halfday';
-                else if (rec.status === 'late')             cls += ' att-cal-td-late';
-                else                                        cls += ' att-cal-td-present';
+                if (isFuture)                                               cls += ' att-cal-td-future';
+                else if (rec && rec.approval_status === 'pending')          cls += ' att-cal-td-pending';
+                else if (rec && rec.approval_status === 'approved' && rec.status === 'halfday') cls += ' att-cal-td-halfday';
+                else if (rec && rec.approval_status === 'approved' && rec.status === 'late')    cls += ' att-cal-td-late';
+                else if (rec && rec.approval_status === 'approved')         cls += ' att-cal-td-present';
+                else if (isWeekend)                                         cls += ' att-cal-td-off';
+                else                                                        cls += ' att-cal-td-absent';
                 const tip = isWeekend ? '' : !rec && !isFuture ? 'Absent'
                   : rec ? `${rec.status} In:${attFmtTime(rec.check_in_at)} Out:${attFmtTime(rec.check_out_at)}`
                   : '';
