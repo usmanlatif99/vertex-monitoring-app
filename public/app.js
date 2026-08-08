@@ -436,8 +436,10 @@ function initApp() {
   document.getElementById('login').style.display        = 'none';
   document.getElementById('app').style.display          = 'block';
 
-  const adminViews = ['dashboard','team','assign','dailylogs','users','myday','password','editTask','archived'];
-  const empViews   = ['myday','mytasks','history','password'];
+  const adminViews = ['dashboard','team','assign','dailylogs','users','attendance','myday','password','editTask','archived'];
+  const empViews   = G.me.attendance_enabled
+    ? ['myday','mytasks','history','attendance','password']
+    : ['myday','mytasks','history','password'];
   const validViews = G.me.role === 'admin' ? adminViews : empViews;
   const hash       = location.hash.slice(1);
 
@@ -534,13 +536,15 @@ function renderNav() {
   const adminItems = [
     ['dashboard', 'Dashboard'], ['team', 'Team tasks'],
     ['assign', 'Assign task'], ['dailylogs', 'Daily logs'],
-    ['users', 'Manage users'], ['archived', 'Archived tasks'],
-    ['myday', 'My day'], ['password', 'Change password'],
-  ];
-  const empItems = [
-    ['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+    ['attendance', 'Attendance'], ['users', 'Manage users'],
+    ['archived', 'Archived tasks'], ['myday', 'My day'],
     ['password', 'Change password'],
   ];
+  const empItems = G.me.attendance_enabled
+    ? [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+       ['attendance', 'Attendance'], ['password', 'Change password']]
+    : [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+       ['password', 'Change password']];
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
   document.getElementById('nav').innerHTML =
@@ -596,8 +600,9 @@ function renderView() {
     detail:    () => renderDetail(G.detailId),
     editTask:  () => renderEditTask(G.editTaskId),
     password:  renderChangePassword,
-    dailylogs: renderDailyLogs,
-    archived:  renderArchived,
+    dailylogs:  renderDailyLogs,
+    archived:   renderArchived,
+    attendance: () => G.me.role === 'admin' ? renderAttendanceAdmin() : renderAttendance(),
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -1032,7 +1037,8 @@ async function renderUsers() {
   <div id="user-form-panel"></div>
   <div class="table-wrap"><table>
     <thead><tr>
-      <th>Name</th><th>Email</th><th>Company</th><th>Department</th><th>Role</th><th>Status</th><th></th>
+      <th>Name</th><th>Email</th><th>Company</th><th>Department</th><th>Role</th><th>Status</th>
+      <th title="Enable / disable attendance marking for this employee">Attendance</th><th></th>
     </tr></thead>
     <tbody>
     ${users.map(u => `<tr>
@@ -1047,6 +1053,14 @@ async function renderUsers() {
       <td class="small">${esc(u.department || '—')}</td>
       <td><span class="pill ${u.role === 'admin' ? 'p-high' : 's-in_progress'}">${u.role}</span></td>
       <td><span class="pill ${u.active ? 's-completed' : 's-not_started'}">${u.active ? 'Active' : 'Inactive'}</span></td>
+      <td style="text-align:center">
+        ${u.role === 'employee'
+          ? `<label class="att-toggle" title="${u.attendance_enabled ? 'Click to disable attendance' : 'Click to enable attendance'}">
+               <input type="checkbox" ${u.attendance_enabled ? 'checked' : ''} onchange="attToggleUser(${u.id},${u.attendance_enabled})">
+               <span class="att-toggle-slider"></span>
+             </label>`
+          : '<span class="muted small">—</span>'}
+      </td>
       <td><button class="btn btn-ghost btn-sm" onclick="showUserForm(${u.id})">Edit</button></td>
     </tr>`).join('')}
     </tbody></table></div>`;
@@ -1963,6 +1977,800 @@ async function deleteAttachment(id, taskId) {
   try {
     await api('DELETE', `/attachments/${id}`);
     toast('Attachment removed', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+// ── ATTENDANCE — shared helpers ────────────────────────────────────────────────
+const ATT_OFFICE_LAT = 31.441300523433583;
+const ATT_OFFICE_LNG = 74.32441912480384;
+const ATT_ALLOWED_M  = 100;
+
+function attHaversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function attFmtTime(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString('en-US',
+    { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+function attDuration(from, to) {
+  if (!from) return '—';
+  const ms = (to ? new Date(to) : new Date()) - new Date(from);
+  const h  = Math.floor(ms / 3600000);
+  const m  = Math.floor((ms % 3600000) / 60000);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function attMonthLabel(m) {
+  return new Date(m + '-01T00:00:00').toLocaleDateString('en-GB',
+    { month: 'long', year: 'numeric' });
+}
+
+function attPrevMonth(m) {
+  const d = new Date(m + '-01T00:00:00');
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
+
+function attNextMonth(m) {
+  const d = new Date(m + '-01T00:00:00');
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString().slice(0, 7);
+}
+
+function attStatusBadge(rec) {
+  if (!rec) return `<span class="att-badge att-absent">Absent</span>`;
+  if (rec.approval_status === 'pending')  return `<span class="att-badge att-pending">Pending</span>`;
+  if (rec.approval_status === 'rejected') return `<span class="att-badge att-rejected">Rejected</span>`;
+  if (rec.status === 'late')    return `<span class="att-badge att-late">Late</span>`;
+  if (rec.status === 'present') return `<span class="att-badge att-present">Present</span>`;
+  return `<span class="att-badge att-absent">Absent</span>`;
+}
+
+// Build a row of day-cells for a month calendar
+function attCalendarRow(records, month) {
+  const [y, m] = month.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const today = TODAY();
+  const byDate = {};
+  (records || []).forEach(r => { byDate[r.date.slice(0, 10)] = r; });
+
+  const DAY_NAMES = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  let hdr = '', cells = '';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds  = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(ds + 'T00:00:00').getDay();
+    const rec = byDate[ds];
+    const isWeekend = dow === 0;
+    const isFuture  = ds > today;
+    const isToday   = ds === today;
+
+    let cls = 'att-cal-cell';
+    if (isWeekend)                                   cls += ' att-cal-off';
+    else if (isFuture)                               cls += ' att-cal-future';
+    else if (!rec)                                   cls += ' att-cal-absent';
+    else if (rec.approval_status === 'pending')      cls += ' att-cal-pending';
+    else if (rec.approval_status === 'rejected')     cls += ' att-cal-rejected';
+    else if (rec.status === 'late')                  cls += ' att-cal-late';
+    else                                             cls += ' att-cal-present';
+    if (isToday) cls += ' att-cal-today';
+
+    const title = isWeekend ? 'Weekend' : !rec && !isFuture ? 'Absent'
+      : rec ? `${rec.status} — In: ${attFmtTime(rec.check_in_at)} Out: ${attFmtTime(rec.check_out_at)}`
+      : '';
+
+    hdr   += `<div class="att-cal-hdr">${d}<div class="att-cal-dow">${DAY_NAMES[dow]}</div></div>`;
+    cells += `<div class="${cls}" title="${esc(title)}"></div>`;
+  }
+  return { hdr, cells, daysInMonth };
+}
+
+// ── ATTENDANCE — Employee view ─────────────────────────────────────────────────
+async function renderAttendance() {
+  const main  = document.getElementById('main');
+  const month = G.attMonth || TODAY().slice(0, 7);
+  G.attMonth  = month;
+
+  const [todayRec, monthRecs] = await Promise.all([
+    api('GET', '/attendance/today'),
+    api('GET', `/attendance/my?month=${month}`),
+  ]);
+
+  const today     = TODAY();
+  const approved  = (monthRecs || []).filter(r => r.approval_status === 'approved');
+  const present   = approved.filter(r => r.status === 'present').length;
+  const late      = approved.filter(r => r.status === 'late').length;
+  const lateAbsents = Math.floor(late / 3);
+  const { y: cy, m: cm } = (() => { const [y,m] = month.split('-'); return {y,m}; })();
+  const daysInMonth = new Date(parseInt(cy), parseInt(cm), 0).getDate();
+  let elapsedWork = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${cy}-${String(cm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if (ds > today) break;
+    if (new Date(ds + 'T00:00:00').getDay() !== 0) elapsedWork++;
+  }
+  const absent = Math.max(0, elapsedWork - present - late) + lateAbsents;
+
+  // Late warning banner
+  let lateWarning = '';
+  if (late === 1) {
+    lateWarning = `<div class="att-warn">You have <b>1 late arrival</b> this month — 2 more will count as 1 absent day.</div>`;
+  } else if (late === 2) {
+    lateWarning = `<div class="att-warn att-warn-red">You have <b>2 late arrivals</b> this month — 1 more will count as 1 absent day!</div>`;
+  } else if (late >= 3) {
+    lateWarning = `<div class="att-warn att-warn-red">You have <b>${late} late arrivals</b> this month — every 3 lates = 1 absent day. You have been marked absent <b>${lateAbsents}</b> day(s) due to late arrivals.</div>`;
+  }
+
+  // Today panel
+  let todayPanel = '';
+  if (!todayRec) {
+    todayPanel = `
+      <div class="att-checkin-card" id="att-checkin-card">
+        <div class="att-checkin-status" id="att-loc-status">
+          <div class="att-loc-icon">📍</div>
+          <div id="att-loc-text" class="muted">Checking your location…</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn btn-amber" id="att-checkin-btn" disabled onclick="attDoCheckin('location')">
+            Check In
+          </button>
+          <button class="btn btn-ghost" onclick="attShowManualCheckin()">
+            Request Manual Check-In
+          </button>
+        </div>
+        <div id="att-manual-form" style="display:none;margin-top:14px">
+          <div class="fld">
+            <label>Reason (will be sent to admin for approval)</label>
+            <textarea id="att-manual-remark" rows="2" placeholder="e.g. Phone GPS not working, please verify via CCTV"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-amber btn-sm" onclick="attDoCheckin('manual')">Submit Request</button>
+            <button class="btn btn-ghost btn-sm" onclick="attHideManualCheckin()">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+  } else if (todayRec.approval_status === 'pending' && !todayRec.check_out_at) {
+    todayPanel = `
+      <div class="att-checkin-card att-card-pending">
+        <div class="att-pending-msg">
+          <span class="att-badge att-pending" style="font-size:13px;padding:4px 12px">Pending approval</span>
+          <span style="margin-left:10px;font-size:13.5px">Your manual check-in for today is awaiting admin approval.</span>
+        </div>
+        <div class="att-time-row" style="margin-top:10px">
+          <span class="muted small">Submitted at</span>
+          <span>${attFmtTime(todayRec.check_in_at)}</span>
+        </div>
+        ${todayRec.checkout_remark ? `<div class="att-remark muted small" style="margin-top:6px">"${esc(todayRec.checkout_remark)}"</div>` : ''}
+      </div>`;
+  } else if (todayRec.check_in_at && !todayRec.check_out_at) {
+    todayPanel = `
+      <div class="att-checkin-card att-card-in" id="att-checkin-card">
+        <div class="att-time-row">
+          <div>
+            <div class="att-badge att-present" style="margin-bottom:6px">${todayRec.status === 'late' ? '⏰ Checked in (Late)' : '✓ Checked In'}</div>
+            <div style="font-size:22px;font-weight:700;letter-spacing:-0.5px">${attFmtTime(todayRec.check_in_at)}</div>
+            <div class="muted small" style="margin-top:2px">Duration: <span id="att-duration-live">${attDuration(todayRec.check_in_at, null)}</span></div>
+          </div>
+        </div>
+        <div class="att-checkin-status" id="att-loc-status" style="margin-top:12px">
+          <div class="att-loc-icon">📍</div>
+          <div id="att-loc-text" class="muted">Checking your location…</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">
+            Check Out
+          </button>
+          <button class="btn btn-ghost" onclick="attShowOooForm()">
+            Out of Office Check-Out
+          </button>
+        </div>
+        <div id="att-ooo-form" style="display:none;margin-top:14px">
+          <div class="fld">
+            <label>Reason for leaving early / out of office (required)</label>
+            <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Doctor appointment at 3 PM, returning by 5 PM"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
+            <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+  } else if (todayRec.check_out_at) {
+    const outPending = todayRec.approval_status === 'pending';
+    todayPanel = `
+      <div class="att-checkin-card att-card-done">
+        <div style="display:flex;gap:24px;flex-wrap:wrap">
+          <div>
+            <div class="muted small">Check In</div>
+            <div style="font-size:18px;font-weight:700">${attFmtTime(todayRec.check_in_at)}</div>
+          </div>
+          <div>
+            <div class="muted small">Check Out</div>
+            <div style="font-size:18px;font-weight:700">${attFmtTime(todayRec.check_out_at)}</div>
+          </div>
+          <div>
+            <div class="muted small">Duration</div>
+            <div style="font-size:18px;font-weight:700">${attDuration(todayRec.check_in_at, todayRec.check_out_at)}</div>
+          </div>
+        </div>
+        ${outPending ? `<div class="att-warn" style="margin-top:10px">Your out-of-office checkout is <b>pending admin approval</b>.</div>` : ''}
+        ${todayRec.checkout_remark ? `<div class="att-remark muted small" style="margin-top:6px">Remark: "${esc(todayRec.checkout_remark)}"</div>` : ''}
+      </div>`;
+  }
+
+  const cal = attCalendarRow(monthRecs, month);
+  const isCurrentMonth = month === TODAY().slice(0, 7);
+  const canGoNext = month < TODAY().slice(0, 7);
+
+  main.innerHTML = `
+  <div class="pagehead">
+    <div><h1>My Attendance</h1>
+    <div class="sub">${new Date().toLocaleDateString('en-GB',
+      { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</div></div>
+  </div>
+
+  ${lateWarning}
+
+  <div class="att-today-section">
+    <div class="att-section-title">Today</div>
+    ${todayPanel}
+  </div>
+
+  <div class="att-month-nav">
+    <button class="btn btn-ghost btn-sm" onclick="G.attMonth='${attPrevMonth(month)}';renderView()">← Prev</button>
+    <span class="att-month-label">${attMonthLabel(month)}</span>
+    <button class="btn btn-ghost btn-sm" ${!canGoNext ? 'disabled' : ''} onclick="G.attMonth='${attNextMonth(month)}';renderView()">Next →</button>
+  </div>
+
+  <div class="att-stats-row">
+    <div class="att-stat att-stat-present"><div class="att-stat-num">${present}</div><div class="att-stat-lbl">Present</div></div>
+    <div class="att-stat att-stat-late"><div class="att-stat-num">${late}</div><div class="att-stat-lbl">Late</div></div>
+    <div class="att-stat att-stat-absent"><div class="att-stat-num">${absent}</div><div class="att-stat-lbl">Absent</div></div>
+    <div class="att-stat att-stat-work"><div class="att-stat-num">${elapsedWork}</div><div class="att-stat-lbl">Working days</div></div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;padding:12px 10px">
+    <div class="att-cal-wrap" style="min-width:${cal.daysInMonth * 34}px">
+      <div class="att-cal-grid" style="grid-template-columns:repeat(${cal.daysInMonth},1fr)">
+        ${cal.hdr}
+      </div>
+      <div class="att-cal-grid" style="grid-template-columns:repeat(${cal.daysInMonth},1fr);margin-top:4px">
+        ${cal.cells}
+      </div>
+    </div>
+    <div class="att-cal-legend">
+      <span><span class="att-cal-cell att-cal-present att-legend-cell"></span>Present</span>
+      <span><span class="att-cal-cell att-cal-late att-legend-cell"></span>Late</span>
+      <span><span class="att-cal-cell att-cal-absent att-legend-cell"></span>Absent</span>
+      <span><span class="att-cal-cell att-cal-pending att-legend-cell"></span>Pending</span>
+      <span><span class="att-cal-cell att-cal-off att-legend-cell"></span>Weekend</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2 style="margin-bottom:12px">Log — ${attMonthLabel(month)}</h2>
+    ${(monthRecs || []).length === 0
+      ? '<div class="empty muted">No records this month</div>'
+      : `<div style="overflow-x:auto"><table class="att-table">
+          <thead><tr>
+            <th>Date</th><th>Status</th><th>Check In</th><th>Check Out</th>
+            <th>Duration</th><th>Type</th><th>Remarks</th>
+          </tr></thead>
+          <tbody>
+            ${(monthRecs || []).slice().reverse().map(r => `
+              <tr>
+                <td>${fmt(r.date)}</td>
+                <td>${attStatusBadge(r)}</td>
+                <td>${attFmtTime(r.check_in_at)}</td>
+                <td>${attFmtTime(r.check_out_at)}</td>
+                <td>${attDuration(r.check_in_at, r.check_out_at)}</td>
+                <td class="muted small">${r.check_in_type || '—'}</td>
+                <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table></div>`}
+  </div>`;
+
+  // Start location check
+  attCheckLocation('att-loc-status', 'att-loc-text', todayRec);
+
+  // Live duration counter when checked in
+  if (todayRec?.check_in_at && !todayRec.check_out_at) {
+    G._attDurationTimer = setInterval(() => {
+      const el = document.getElementById('att-duration-live');
+      if (el) el.textContent = attDuration(todayRec.check_in_at, null);
+      else clearInterval(G._attDurationTimer);
+    }, 30000);
+  }
+}
+
+function attCheckLocation(statusId, textId, todayRec) {
+  const statusEl = document.getElementById(statusId);
+  const textEl   = document.getElementById(textId);
+  const checkinBtn  = document.getElementById('att-checkin-btn');
+  const checkoutBtn = document.getElementById('att-checkout-btn');
+
+  if (!statusEl) return;
+  if (!navigator.geolocation) {
+    if (textEl) textEl.textContent = 'Geolocation not supported by your browser.';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const dist = attHaversineM(
+        ATT_OFFICE_LAT, ATT_OFFICE_LNG,
+        pos.coords.latitude, pos.coords.longitude
+      );
+      const inRange = dist <= ATT_ALLOWED_M;
+      if (textEl) {
+        textEl.innerHTML = inRange
+          ? `<span style="color:var(--green)">✓ At office (${Math.round(dist)}m away)</span>`
+          : `<span style="color:var(--red)">✗ ${Math.round(dist)}m from office — location check-in unavailable</span>`;
+      }
+      if (statusEl) {
+        statusEl.style.background = inRange ? 'var(--green-s)' : 'var(--red-s)';
+        statusEl.style.borderColor = inRange ? 'var(--green)' : 'var(--red)';
+      }
+      if (checkinBtn  && inRange) { checkinBtn.disabled  = false; checkinBtn.dataset.lat = pos.coords.latitude; checkinBtn.dataset.lng = pos.coords.longitude; }
+      if (checkoutBtn && inRange) { checkoutBtn.disabled = false; checkoutBtn.dataset.lat = pos.coords.latitude; checkoutBtn.dataset.lng = pos.coords.longitude; }
+    },
+    err => {
+      if (textEl) textEl.textContent = 'Location access denied — use manual check-in option below.';
+    },
+    { timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+function attShowManualCheckin() {
+  document.getElementById('att-manual-form').style.display = 'block';
+}
+function attHideManualCheckin() {
+  document.getElementById('att-manual-form').style.display = 'none';
+}
+function attShowOooForm() {
+  document.getElementById('att-ooo-form').style.display = 'block';
+}
+function attHideOooForm() {
+  document.getElementById('att-ooo-form').style.display = 'none';
+}
+
+async function attDoCheckin(type) {
+  const btn = document.getElementById('att-checkin-btn');
+  let payload = { type };
+  if (type === 'location') {
+    payload.lat = parseFloat(btn.dataset.lat);
+    payload.lng = parseFloat(btn.dataset.lng);
+  } else {
+    const remark = document.getElementById('att-manual-remark')?.value.trim();
+    if (!remark) { toast('Please enter a reason for manual check-in', 'error'); return; }
+    payload.remark = remark;
+  }
+  try {
+    if (btn) btn.disabled = true;
+    await api('POST', '/attendance/checkin', payload);
+    toast(type === 'manual' ? 'Manual check-in request submitted' : 'Checked in successfully ✓', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function attDoCheckout(type) {
+  const btn = document.getElementById('att-checkout-btn');
+  let payload = { type };
+  if (type === 'location') {
+    payload.lat = parseFloat(btn.dataset.lat);
+    payload.lng = parseFloat(btn.dataset.lng);
+  } else {
+    const remark = document.getElementById('att-ooo-remark')?.value.trim();
+    if (!remark) { toast('Please enter a reason for out-of-office checkout', 'error'); return; }
+    payload.remark = remark;
+  }
+  try {
+    if (btn) btn.disabled = true;
+    await api('POST', '/attendance/checkout', payload);
+    toast(type === 'out_of_office' ? 'Out-of-office checkout submitted for approval' : 'Checked out successfully ✓', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── ATTENDANCE — Admin view ────────────────────────────────────────────────────
+function attAdminTab(tab) {
+  G._attAdminTab = tab;
+  renderView();
+}
+
+async function renderAttendanceAdmin() {
+  const main = document.getElementById('main');
+  const tab  = G._attAdminTab || 'daily';
+
+  // Count pending for badge
+  let pendingCount = 0;
+  try {
+    const pending = await api('GET', '/attendance/admin/pending');
+    pendingCount = (pending || []).length;
+  } catch (_) {}
+
+  const tabs = `
+  <div class="att-admin-tabs">
+    <button class="${tab === 'daily'   ? 'active' : ''}" onclick="attAdminTab('daily')">Daily View</button>
+    <button class="${tab === 'monthly' ? 'active' : ''}" onclick="attAdminTab('monthly')">Monthly Report</button>
+    <button class="${tab === 'pending' ? 'active' : ''}" onclick="attAdminTab('pending')">
+      Pending Approvals${pendingCount ? ` <span class="att-pending-badge">${pendingCount}</span>` : ''}
+    </button>
+  </div>`;
+
+  main.innerHTML = `
+  <div class="pagehead">
+    <div><h1>Attendance</h1><div class="sub">Manage employee attendance records</div></div>
+    <button class="btn btn-ghost btn-sm" onclick="attAdminExport()">Export PDF</button>
+  </div>
+  ${tabs}
+  <div id="att-admin-body"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>`;
+
+  if (tab === 'daily')   renderAttAdminDaily();
+  else if (tab === 'monthly') renderAttAdminMonthly();
+  else if (tab === 'pending') renderAttAdminPending();
+}
+
+async function renderAttAdminDaily() {
+  const body = document.getElementById('att-admin-body');
+  const date = G._attAdminDate || TODAY();
+  G._attAdminDate = date;
+
+  const rows = await api('GET', `/attendance/admin/daily?date=${date}`);
+  if (!rows) return;
+
+  const vtx = rows.filter(r => r.company === 'VTX');
+  const vsn = rows.filter(r => r.company === 'VSN');
+
+  function buildTable(list) {
+    if (!list.length) return '<div class="muted small">No employees.</div>';
+    const present = list.filter(r => r.record?.approval_status === 'approved' && r.record?.status === 'present').length;
+    const late    = list.filter(r => r.record?.approval_status === 'approved' && r.record?.status === 'late').length;
+    const pending = list.filter(r => r.record?.approval_status === 'pending').length;
+    const absent  = list.filter(r => !r.record).length;
+    return `
+      <div class="att-daily-summary">
+        <span class="att-badge att-present">${present} Present</span>
+        <span class="att-badge att-late">${late} Late</span>
+        <span class="att-badge att-absent">${absent} Absent</span>
+        ${pending ? `<span class="att-badge att-pending">${pending} Pending</span>` : ''}
+      </div>
+      <div style="overflow-x:auto"><table class="att-table">
+        <thead><tr>
+          <th>Employee</th><th>Dept</th><th>Status</th>
+          <th>Check In</th><th>Check Out</th><th>Duration</th><th>Type</th><th>Action</th>
+        </tr></thead>
+        <tbody>
+          ${list.map(r => `
+            <tr>
+              <td>${esc(r.name)}</td>
+              <td class="muted small">${esc(r.department || '—')}</td>
+              <td>${attStatusBadge(r.record)}</td>
+              <td>${attFmtTime(r.record?.check_in_at)}</td>
+              <td>${attFmtTime(r.record?.check_out_at)}</td>
+              <td>${r.record ? attDuration(r.record.check_in_at, r.record.check_out_at) : '—'}</td>
+              <td class="muted small">${r.record ? esc(r.record.check_in_type || '') : '—'}</td>
+              <td>
+                <button class="btn btn-ghost btn-sm" onclick="attAdminMarkModal(${r.id},'${esc(r.name)}','${date}',${r.record ? r.record.id : 'null'})">
+                  ${r.record ? 'Edit' : 'Mark'}
+                </button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table></div>`;
+  }
+
+  body.innerHTML = `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <label style="font-size:13px;font-weight:600">Date</label>
+    <input type="date" value="${date}" max="${TODAY()}"
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:14px;background:#fff;color:var(--ink);width:auto"
+      onchange="G._attAdminDate=this.value;renderAttAdminDaily()">
+    <span class="muted small">${rows.length} employee(s) with attendance enabled</span>
+  </div>
+  ${vtx.length ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildTable(vtx)}</div>` : ''}
+  ${vsn.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildTable(vsn)}</div>` : ''}
+  ${!rows.length ? '<div class="card"><div class="empty">No employees with attendance enabled.</div></div>' : ''}
+  <div id="att-mark-modal" style="display:none"></div>`;
+}
+
+async function renderAttAdminMonthly() {
+  const body  = document.getElementById('att-admin-body');
+  const month = G._attAdminMonth || TODAY().slice(0, 7);
+  G._attAdminMonth = month;
+
+  const data = await api('GET', `/attendance/admin/monthly?month=${month}`);
+  if (!data) return;
+
+  function buildMonthTable(list) {
+    if (!list.length) return '<div class="muted small">No employees.</div>';
+    const cal = list[0] ? attCalendarRow([], month) : null;
+    const daysInMonth = cal ? cal.daysInMonth : 31;
+    return `
+      <div style="overflow-x:auto">
+        <table class="att-table att-monthly-table">
+          <thead>
+            <tr>
+              <th style="min-width:140px">Employee</th>
+              <th>Dept</th>
+              <th style="text-align:center">Present</th>
+              <th style="text-align:center">Late</th>
+              <th style="text-align:center">Absent</th>
+              <th colspan="${daysInMonth}" style="text-align:center;border-left:1px solid var(--line)">${attMonthLabel(month)}</th>
+            </tr>
+            <tr class="att-cal-header-row">
+              <th></th><th></th><th></th><th></th><th></th>
+              ${(() => {
+                const [y, m] = month.split('-').map(Number);
+                const dIM = new Date(y, m, 0).getDate();
+                let ths = '';
+                for (let d = 1; d <= dIM; d++) {
+                  const ds  = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                  const dow = new Date(ds + 'T00:00:00').getDay();
+                  const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+                  ths += `<th class="att-cal-th${dow === 0 ? ' att-cal-th-off' : ''}">${d}<div style="font-size:9px;opacity:.7">${dayNames[dow]}</div></th>`;
+                }
+                return ths;
+              })()}
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(u => {
+              const today = TODAY();
+              const [y, m] = month.split('-').map(Number);
+              const dIM = new Date(y, m, 0).getDate();
+              const byDate = {};
+              (u.records || []).forEach(r => { byDate[r.date.slice(0,10)] = r; });
+              let dayCells = '';
+              for (let d = 1; d <= dIM; d++) {
+                const ds  = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const dow = new Date(ds + 'T00:00:00').getDay();
+                const rec = byDate[ds];
+                const isFuture  = ds > today;
+                const isWeekend = dow === 0;
+                let cls = 'att-cal-td';
+                if (isWeekend)                              cls += ' att-cal-td-off';
+                else if (isFuture)                          cls += ' att-cal-td-future';
+                else if (!rec)                              cls += ' att-cal-td-absent';
+                else if (rec.approval_status === 'pending') cls += ' att-cal-td-pending';
+                else if (rec.status === 'late')             cls += ' att-cal-td-late';
+                else                                        cls += ' att-cal-td-present';
+                const tip = isWeekend ? '' : !rec && !isFuture ? 'Absent'
+                  : rec ? `${rec.status} In:${attFmtTime(rec.check_in_at)} Out:${attFmtTime(rec.check_out_at)}`
+                  : '';
+                dayCells += `<td class="${cls}" title="${esc(tip)}"></td>`;
+              }
+              return `
+                <tr>
+                  <td style="font-weight:500">${esc(u.name)}</td>
+                  <td class="muted small">${esc(u.department || '—')}</td>
+                  <td style="text-align:center;color:var(--green);font-weight:600">${u.present}</td>
+                  <td style="text-align:center;color:var(--amber);font-weight:600">${u.late}</td>
+                  <td style="text-align:center;color:var(--red);font-weight:600">${u.absent}</td>
+                  ${dayCells}
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  const vtx = data.filter(u => u.company === 'VTX');
+  const vsn = data.filter(u => u.company === 'VSN');
+
+  body.innerHTML = `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="G._attAdminMonth='${attPrevMonth(month)}';renderAttAdminMonthly()">← Prev</button>
+    <span style="font-weight:600;font-size:15px">${attMonthLabel(month)}</span>
+    <button class="btn btn-ghost btn-sm" ${month >= TODAY().slice(0,7) ? 'disabled' : ''} onclick="G._attAdminMonth='${attNextMonth(month)}';renderAttAdminMonthly()">Next →</button>
+    <button class="btn btn-amber btn-sm" style="margin-left:auto" onclick="attAdminExport()">Export PDF</button>
+  </div>
+  ${vtx.length ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildMonthTable(vtx)}</div>` : ''}
+  ${vsn.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildMonthTable(vsn)}</div>` : ''}
+  ${!data.length ? '<div class="card"><div class="empty">No employees with attendance enabled.</div></div>' : ''}
+  <div class="att-monthly-legend">
+    <span><span class="att-cal-td att-cal-td-present att-legend-cell-sm"></span>Present</span>
+    <span><span class="att-cal-td att-cal-td-late att-legend-cell-sm"></span>Late</span>
+    <span><span class="att-cal-td att-cal-td-absent att-legend-cell-sm"></span>Absent</span>
+    <span><span class="att-cal-td att-cal-td-pending att-legend-cell-sm"></span>Pending</span>
+    <span><span class="att-cal-td att-cal-td-off att-legend-cell-sm"></span>Weekend</span>
+  </div>`;
+}
+
+async function renderAttAdminPending() {
+  const body = document.getElementById('att-admin-body');
+  const rows = await api('GET', '/attendance/admin/pending');
+  if (!rows) return;
+
+  if (!rows.length) {
+    body.innerHTML = `<div class="card"><div class="empty">No pending approvals — all clear ✓</div></div>`;
+    return;
+  }
+
+  body.innerHTML = `
+  <div class="card">
+    <h2 style="margin-bottom:14px">Pending Approvals (${rows.length})</h2>
+    <div style="overflow-x:auto"><table class="att-table">
+      <thead><tr>
+        <th>Employee</th><th>Company</th><th>Date</th><th>Type</th>
+        <th>Check In</th><th>Check Out</th><th>Reason</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr id="att-pend-row-${r.id}">
+            <td style="font-weight:500">${esc(r.user_name)}</td>
+            <td class="muted small">${r.company === 'VTX' ? 'Vertex' : 'Vision'}</td>
+            <td>${fmt(r.date)}</td>
+            <td class="muted small">${esc(r.check_in_type)}${r.check_out_type ? ' / ' + esc(r.check_out_type) : ''}</td>
+            <td>${attFmtTime(r.check_in_at)}</td>
+            <td>${attFmtTime(r.check_out_at)}</td>
+            <td class="muted small" style="max-width:200px">${esc(r.checkout_remark || '—')}</td>
+            <td style="white-space:nowrap">
+              <button class="btn btn-sm" style="background:var(--green);color:#fff;margin-right:6px"
+                onclick="attApprove(${r.id},'approve')">Approve</button>
+              <button class="btn btn-sm" style="background:var(--red);color:#fff"
+                onclick="attApprove(${r.id},'reject')">Reject</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+async function attApprove(id, action) {
+  const adminNote = action === 'reject'
+    ? prompt('Reason for rejection (optional):')
+    : null;
+  if (action === 'reject' && adminNote === null) return; // cancelled
+  try {
+    await api('PUT', `/attendance/admin/approve/${id}`, { action, admin_note: adminNote || undefined });
+    const row = document.getElementById(`att-pend-row-${id}`);
+    if (row) row.remove();
+    toast(action === 'approve' ? 'Approved ✓' : 'Rejected', action === 'approve' ? 'success' : 'error');
+    // Refresh pending count in tabs
+    G._attAdminTab = 'pending';
+    renderAttendanceAdmin();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+function attAdminMarkModal(userId, userName, date, recId) {
+  const modal = document.getElementById('att-mark-modal');
+  if (!modal) return;
+  modal.style.display = 'block';
+  modal.innerHTML = `
+  <div class="att-modal-overlay" onclick="attCloseModal()"></div>
+  <div class="att-modal-box">
+    <h2>${recId ? 'Edit' : 'Mark'} Attendance — ${esc(userName)}</h2>
+    <div class="muted small" style="margin-bottom:14px">${date}</div>
+    <form onsubmit="attSubmitMark(event,${userId},${recId || 'null'},'${date}')">
+      <div class="row">
+        <div class="fld">
+          <label>Check In Time</label>
+          <input type="time" id="att-m-in" value="09:00">
+        </div>
+        <div class="fld">
+          <label>Check Out Time (optional)</label>
+          <input type="time" id="att-m-out">
+        </div>
+      </div>
+      <div class="fld">
+        <label>Status</label>
+        <select id="att-m-status">
+          <option value="present">Present</option>
+          <option value="late">Late</option>
+          <option value="absent">Absent</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>Admin Note</label>
+        <input type="text" id="att-m-note" placeholder="Reason for manual entry">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button type="submit" class="btn btn-amber">Save</button>
+        <button type="button" class="btn btn-ghost" onclick="attCloseModal()">Cancel</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+function attCloseModal() {
+  const m = document.getElementById('att-mark-modal');
+  if (m) { m.style.display = 'none'; m.innerHTML = ''; }
+}
+
+async function attSubmitMark(e, userId, recId, date) {
+  e.preventDefault();
+  const timeIn  = document.getElementById('att-m-in').value;
+  const timeOut = document.getElementById('att-m-out').value;
+  const status  = document.getElementById('att-m-status').value;
+  const note    = document.getElementById('att-m-note').value.trim();
+
+  const makeTS = (t) => t ? `${date}T${t}:00+05:00` : null;
+
+  try {
+    if (recId) {
+      await api('PUT', `/attendance/admin/edit/${recId}`, {
+        check_in_at:     makeTS(timeIn),
+        check_out_at:    makeTS(timeOut) || undefined,
+        status, admin_note: note || undefined,
+        approval_status: 'approved',
+      });
+    } else {
+      await api('POST', '/attendance/admin/manual', {
+        user_id: userId, date,
+        check_in_at:  makeTS(timeIn),
+        check_out_at: makeTS(timeOut) || undefined,
+        status, admin_note: note || undefined,
+      });
+    }
+    toast('Attendance record saved ✓', 'success');
+    attCloseModal();
+    renderAttAdminDaily();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+function attAdminExport() {
+  const month = G._attAdminMonth || TODAY().slice(0, 7);
+  const title  = `Attendance Report — ${attMonthLabel(month)}`;
+  const w = window.open('', '_blank');
+  const body = document.getElementById('att-admin-body');
+  w.document.write(`<!DOCTYPE html><html><head>
+    <title>${title}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
+      h1   { font-size: 16px; margin-bottom: 4px; }
+      .sub { font-size: 11px; color: #666; margin-bottom: 14px; }
+      table { border-collapse: collapse; width: 100%; font-size: 11px; }
+      th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; white-space: nowrap; }
+      th { background: #f5f5f5; font-weight: 700; }
+      .att-cal-td-present { background: #d1fae5; }
+      .att-cal-td-late    { background: #fef3c7; }
+      .att-cal-td-absent  { background: #fee2e2; }
+      .att-cal-td-off     { background: #f0f0f0; color: #999; }
+      .att-cal-td-pending { background: #e0e7ff; }
+      .att-cal-td-future  { background: #f9fafb; }
+      .att-company-block  { margin-bottom: 24px; }
+      .att-company-title  { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+      @media print { body { margin: 10mm; } }
+    </style>
+  </head><body>
+    <h1>${title}</h1>
+    <div class="sub">Vertex Electronics / Vision Engineering — Generated ${new Date().toLocaleDateString('en-GB')}</div>
+    ${body ? body.innerHTML : ''}
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 600);
+}
+
+// ── ATTENDANCE — Manage Users toggle (called from renderUsers) ─────────────────
+async function attToggleUser(userId, currentVal) {
+  const enabled = !currentVal;
+  try {
+    await api('PUT', `/attendance/toggle/${userId}`, { enabled });
+    toast(enabled ? 'Attendance enabled' : 'Attendance disabled', 'success');
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');

@@ -333,3 +333,169 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 .toast.show         { opacity: 1; }
 .toast.show.error   { background: var(--red); }
 .toast.show.success { background: var(--green); }
+
+/* ── Attendance module ─────────────────────────────────────────────────────── */
+
+/* Status badges */
+.att-badge { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11.5px; font-weight:600; }
+.att-present  { background:var(--green-s); color:#14532d; }
+.att-late     { background:var(--amber-s); color:#78350f; }
+.att-absent   { background:var(--red-s);   color:#7f1d1d; }
+.att-pending  { background:#e0e7ff;         color:#3730a3; }
+.att-rejected { background:#f3f4f6;         color:#374151; }
+
+/* Warning banners */
+.att-warn {
+  background:var(--amber-s); border-left:4px solid var(--amber);
+  color:#78350f; padding:10px 14px; border-radius:6px;
+  margin-bottom:16px; font-size:13.5px;
+}
+.att-warn-red { background:var(--red-s); border-left-color:var(--red); color:#7f1d1d; }
+
+/* Today check-in card */
+.att-today-section { margin-bottom:18px; }
+.att-section-title { font-size:12px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--ink-soft); margin-bottom:8px; }
+
+.att-checkin-card {
+  background:var(--card); border:1px solid var(--line); border-radius:10px;
+  padding:18px 20px; box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.att-card-in   { border-left:4px solid var(--green); }
+.att-card-done { border-left:4px solid var(--accent); }
+.att-card-pending { border-left:4px solid #6366f1; }
+
+.att-checkin-status {
+  display:flex; align-items:center; gap:10px;
+  background:var(--grey-s); border:1px solid var(--line);
+  border-radius:8px; padding:10px 14px; font-size:13px;
+}
+.att-loc-icon { font-size:18px; }
+.att-time-row { display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap; }
+.att-remark   { margin-top:6px; font-style:italic; }
+
+/* Stats row */
+.att-stats-row { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.att-stat {
+  flex:1; min-width:80px; background:var(--card); border:1px solid var(--line);
+  border-radius:10px; padding:12px 14px; text-align:center;
+}
+.att-stat-num { font-size:24px; font-weight:700; line-height:1.1; }
+.att-stat-lbl { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+.att-stat-present .att-stat-num { color:var(--green); }
+.att-stat-late    .att-stat-num { color:var(--amber); }
+.att-stat-absent  .att-stat-num { color:var(--red); }
+.att-stat-work    .att-stat-num { color:var(--accent); }
+
+/* Month nav */
+.att-month-nav {
+  display:flex; align-items:center; gap:12px; margin-bottom:14px;
+}
+.att-month-label { font-weight:600; font-size:15px; flex:1; }
+
+/* Calendar — employee row */
+.att-cal-wrap  { padding:8px 4px 4px; }
+.att-cal-grid  { display:grid; gap:2px; }
+.att-cal-hdr   {
+  text-align:center; font-size:11px; font-weight:700; color:var(--ink-soft);
+  padding:2px 0; line-height:1.3;
+}
+.att-cal-dow   { font-size:9px; font-weight:400; }
+.att-cal-cell  {
+  height:18px; border-radius:3px; background:var(--grey-s);
+  cursor:default; transition:opacity .1s;
+}
+.att-cal-cell:hover { opacity:.85; }
+.att-cal-present { background:#bbf7d0; }
+.att-cal-late    { background:#fde68a; }
+.att-cal-absent  { background:#fecaca; }
+.att-cal-pending { background:#c7d2fe; }
+.att-cal-rejected{ background:#d1d5db; }
+.att-cal-off     { background:#e5e7eb; }
+.att-cal-future  { background:#f3f4f6; opacity:.5; }
+.att-cal-today   { outline:2px solid var(--accent); outline-offset:-1px; }
+
+.att-legend-cell    { display:inline-block; width:16px; height:12px; border-radius:2px; vertical-align:middle; margin-right:3px; }
+.att-legend-cell-sm { display:inline-block; width:12px; height:10px; border-radius:2px; vertical-align:middle; margin-right:3px; }
+
+.att-cal-legend {
+  display:flex; flex-wrap:wrap; gap:10px;
+  margin-top:10px; font-size:12px; color:var(--ink-soft);
+}
+
+/* Attendance table */
+.att-table { width:100%; border-collapse:collapse; font-size:13px; }
+.att-table th {
+  text-align:left; font-size:11.5px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.04em; color:var(--ink-soft);
+  padding:7px 10px; border-bottom:2px solid var(--line);
+}
+.att-table td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+.att-table tr:last-child td { border-bottom:none; }
+.att-table tr:hover td { background:var(--grey-s); }
+
+/* Admin tabs */
+.att-admin-tabs {
+  display:flex; gap:0; border-bottom:2px solid var(--line); margin-bottom:20px;
+}
+.att-admin-tabs button {
+  background:none; border:none; padding:10px 18px; font-size:13.5px; font-weight:500;
+  color:var(--ink-soft); cursor:pointer; border-bottom:3px solid transparent;
+  margin-bottom:-2px; transition:color .15s;
+}
+.att-admin-tabs button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.att-admin-tabs button:hover  { color:var(--ink); }
+
+.att-pending-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  background:var(--red); color:#fff; border-radius:10px;
+  font-size:11px; font-weight:700; padding:1px 6px; min-width:18px; margin-left:4px;
+}
+
+/* Admin daily summary */
+.att-daily-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+.att-company-block { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+.att-company-title { font-size:13px; font-weight:700; color:var(--ink-soft);
+  text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px; }
+
+/* Monthly report table */
+.att-monthly-table th { font-size:11px; }
+.att-cal-header-row th { font-size:10px; padding:4px 2px; text-align:center; min-width:22px; }
+.att-cal-th  { padding:3px 2px !important; }
+.att-cal-th-off { color:var(--ink-soft) !important; }
+.att-cal-td { width:22px; min-width:22px; height:18px; padding:0 !important;
+  border:1px solid var(--line) !important; }
+.att-cal-td-present  { background:#bbf7d0 !important; }
+.att-cal-td-late     { background:#fde68a !important; }
+.att-cal-td-absent   { background:#fecaca !important; }
+.att-cal-td-pending  { background:#c7d2fe !important; }
+.att-cal-td-off      { background:#e5e7eb !important; }
+.att-cal-td-future   { background:#f9fafb !important; }
+.att-monthly-legend  {
+  display:flex; flex-wrap:wrap; gap:12px;
+  margin-top:14px; font-size:12px; color:var(--ink-soft);
+}
+
+/* Manual mark modal */
+.att-modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:200;
+}
+.att-modal-box {
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+  background:var(--card); border-radius:12px; padding:24px 28px;
+  width:min(520px,95vw); z-index:201; box-shadow:0 8px 32px rgba(0,0,0,.2);
+}
+.att-modal-box h2 { margin-bottom:4px; }
+
+/* Toggle switch for attendance_enabled */
+.att-toggle { position:relative; display:inline-block; width:40px; height:22px; cursor:pointer; }
+.att-toggle input { opacity:0; width:0; height:0; }
+.att-toggle-slider {
+  position:absolute; inset:0; background:#ccc; border-radius:22px; transition:.2s;
+}
+.att-toggle-slider:before {
+  content:''; position:absolute; height:16px; width:16px;
+  left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s;
+}
+.att-toggle input:checked + .att-toggle-slider { background:var(--green); }
+.att-toggle input:checked + .att-toggle-slider:before { transform:translateX(18px); }

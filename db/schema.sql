@@ -106,3 +106,31 @@ CREATE INDEX IF NOT EXISTS idx_logs_user_date   ON daily_logs(user_id, log_date)
 CREATE INDEX IF NOT EXISTS idx_logs_task        ON daily_logs(task_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task    ON task_comments(task_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_task ON task_attachments(task_id);
+
+-- Attendance module
+ALTER TABLE users ADD COLUMN IF NOT EXISTS attendance_enabled BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS attendance (
+  id              SERIAL PRIMARY KEY,
+  user_id         INTEGER NOT NULL REFERENCES users(id),
+  date            DATE    NOT NULL,
+  check_in_at     TIMESTAMPTZ,
+  check_out_at    TIMESTAMPTZ,
+  check_in_lat    NUMERIC(10,7),
+  check_in_lng    NUMERIC(10,7),
+  check_out_lat   NUMERIC(10,7),
+  check_out_lng   NUMERIC(10,7),
+  status          VARCHAR(20) NOT NULL DEFAULT 'present',
+  check_in_type   VARCHAR(20) NOT NULL DEFAULT 'location',
+  check_out_type  VARCHAR(20),
+  checkout_remark TEXT,
+  approval_status VARCHAR(20) NOT NULL DEFAULT 'approved',
+  approved_by     INTEGER REFERENCES users(id),
+  approved_at     TIMESTAMPTZ,
+  admin_note      TEXT,
+  UNIQUE(user_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_att_user_date ON attendance(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_att_date      ON attendance(date);
+CREATE INDEX IF NOT EXISTS idx_att_pending   ON attendance(approval_status) WHERE approval_status = 'pending';

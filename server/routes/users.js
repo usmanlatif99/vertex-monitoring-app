@@ -10,7 +10,7 @@ const adminOnly = (req, res, next) =>
 router.get('/', auth, adminOnly, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, name, email, role, company, department, active, created_at
+      `SELECT id, name, email, role, company, department, active, attendance_enabled, created_at
        FROM users ORDER BY company, name`
     );
     res.json(rows);
