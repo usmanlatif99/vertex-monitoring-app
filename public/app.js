@@ -2437,8 +2437,9 @@ async function renderAttAdminDaily() {
   const rows = await api('GET', `/attendance/admin/daily?date=${date}`);
   if (!rows) return;
 
-  const vtx = rows.filter(r => r.company === 'VTX');
-  const vsn = rows.filter(r => r.company === 'VSN');
+  const vtx   = rows.filter(r => r.company === 'VTX');
+  const vsn   = rows.filter(r => r.company === 'VSN');
+  const other = rows.filter(r => r.company !== 'VTX' && r.company !== 'VSN');
 
   function buildTable(list) {
     if (!list.length) return '<div class="muted small">No employees.</div>';
@@ -2486,8 +2487,9 @@ async function renderAttAdminDaily() {
       onchange="G._attAdminDate=this.value;renderAttAdminDaily()">
     <span class="muted small">${rows.length} employee(s) with attendance enabled</span>
   </div>
-  ${vtx.length ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildTable(vtx)}</div>` : ''}
-  ${vsn.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildTable(vsn)}</div>` : ''}
+  ${vtx.length   ? `<div class="att-company-block"><div class="att-company-title">Vertex Electronics</div>${buildTable(vtx)}</div>` : ''}
+  ${vsn.length   ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">Vision Engineering</div>${buildTable(vsn)}</div>` : ''}
+  ${other.length ? `<div class="att-company-block" style="margin-top:18px"><div class="att-company-title">All Companies</div>${buildTable(other)}</div>` : ''}
   ${!rows.length ? '<div class="card"><div class="empty">No employees with attendance enabled.</div></div>' : ''}
   <div id="att-mark-modal" style="display:none"></div>`;
 }
