@@ -2162,12 +2162,12 @@ async function renderAttendance() {
             <button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">
               Check Out
             </button>
-            <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Out of Office Check-Out</button>
+            <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>
           </div>
           <div id="att-ooo-form" style="display:none;margin-top:12px">
             <div class="fld">
-              <label>Reason for out-of-office checkout (required)</label>
-              <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for appointment"></textarea>
+              <label>Reason for early leave or remote checkout (required)</label>
+              <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
             </div>
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
@@ -2195,13 +2195,13 @@ async function renderAttendance() {
             Check Out
           </button>
           <button class="btn btn-ghost" onclick="attShowOooForm()">
-            Out of Office Check-Out
+            Early Leave / Remote Check-Out
           </button>
         </div>
         <div id="att-ooo-form" style="display:none;margin-top:14px">
           <div class="fld">
-            <label>Reason for leaving early / out of office (required)</label>
-            <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Doctor appointment at 3 PM, returning by 5 PM"></textarea>
+            <label>Reason for early leave or remote checkout (required)</label>
+            <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
           </div>
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
@@ -2298,7 +2298,14 @@ async function renderAttendance() {
                 <td>${attFmtTime(r.check_in_at)}</td>
                 <td>${attFmtTime(r.check_out_at)}</td>
                 <td>${attDuration(r.check_in_at, r.check_out_at)}</td>
-                <td class="muted small">${r.check_in_type || '—'}</td>
+                <td class="muted small">${
+                  r.check_in_type === 'location' ? 'GPS' :
+                  r.check_in_type === 'manual'   ? 'Manual' : '—'
+                }${r.check_out_type ? ' / ' + (
+                  r.check_out_type === 'location'    ? 'GPS' :
+                  r.check_out_type === 'out_of_office' ? 'Early leave' :
+                  r.check_out_type === 'manual'      ? 'Manual' : r.check_out_type
+                ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
               </tr>`).join('')}
           </tbody>
@@ -2405,7 +2412,7 @@ async function attDoCheckout(type) {
   try {
     if (btn) btn.disabled = true;
     await api('POST', '/attendance/checkout', payload);
-    toast(type === 'out_of_office' ? 'Out-of-office checkout submitted for approval' : 'Checked out successfully ✓', 'success');
+    toast(type === 'out_of_office' ? 'Early leave / remote checkout submitted for approval' : 'Checked out successfully ✓', 'success');
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');
@@ -2679,7 +2686,7 @@ async function renderAttAdminPending() {
                 ? `<span class="att-badge att-pending" style="font-size:11px">Check-Out</span>`
                 : `<span style="color:var(--green);font-size:13px">✓ Check-Out</span>`}
               <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_out_at)}</span>
-              <span class="muted small" style="margin-left:6px">· ${r.check_out_type === 'out_of_office' ? 'Out of office' : r.check_out_type === 'manual' ? 'Manual request' : 'GPS verified'}</span>
+              <span class="muted small" style="margin-left:6px">· ${r.check_out_type === 'out_of_office' ? 'Early leave / remote' : r.check_out_type === 'manual' ? 'Manual request' : 'GPS verified'}</span>
             </div>
             ${hasCheckoutPending ? `<div class="att-pend-reason">${r.checkout_remark ? `"${esc(r.checkout_remark)}"` : '<span class="muted" style="font-style:normal">No reason provided</span>'}</div>` : ''}
           </div>` : `
