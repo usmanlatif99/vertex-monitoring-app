@@ -532,3 +532,16 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 .att-cal-halfday    { background:#ddd6fe; }
 .att-cal-td-halfday { background:#ddd6fe !important; }
 .att-stat-halfday .att-stat-num { color:#7c3aed; }
+
+/* Device registration panel */
+.att-device-card { padding: 16px 20px; }
+.att-device-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 6px; font-size: 13.5px; font-weight: 600;
+}
+.att-device-approved { background: var(--green-s); color: var(--green); }
+.att-device-pending  { background: var(--amber-s); color: #a16207; }
+.att-device-revoked  { background: var(--red-s);   color: var(--red); }
+
+/* Devices admin table — reuse att-table */
+.att-badge.att-rejected { background: var(--red-s); color: var(--red); }

@@ -2131,10 +2131,12 @@ async function renderAttendance() {
   const month = G.attMonth || TODAY().slice(0, 7);
   G.attMonth  = month;
 
-  const [todayRec, monthRecs] = await Promise.all([
+  const [todayRec, monthRecs, deviceInfo] = await Promise.all([
     api('GET', '/attendance/today'),
     api('GET', `/attendance/my?month=${month}`),
+    api('GET', '/webauthn/device').catch(() => null),
   ]);
+  G._attDevice = deviceInfo;
 
   const today     = TODAY();
   const approved  = (monthRecs || []).filter(r => r.approval_status === 'approved');
@@ -2164,32 +2166,52 @@ async function renderAttendance() {
 
   // Today panel
   let todayPanel = '';
+  const hasApprovedDevice = deviceInfo?.status === 'approved';
   if (!todayRec) {
-    todayPanel = `
-      <div class="att-checkin-card" id="att-checkin-card">
-        <div class="att-checkin-status" id="att-loc-status">
-          <div class="att-loc-icon">📍</div>
-          <div id="att-loc-text" class="muted">Checking your location…</div>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-          <button class="btn btn-amber" id="att-checkin-btn" disabled onclick="attDoCheckin('location')">
-            Check In
-          </button>
-          <button class="btn btn-ghost" onclick="attShowManualCheckin()">
-            Request Manual Check-In
-          </button>
-        </div>
-        <div id="att-manual-form" style="display:none;margin-top:14px">
-          <div class="fld">
-            <label>Reason (will be sent to admin for approval)</label>
-            <textarea id="att-manual-remark" rows="2" placeholder="e.g. Phone GPS not working, please verify via CCTV"></textarea>
+    if (hasApprovedDevice) {
+      todayPanel = `
+        <div class="att-checkin-card" id="att-checkin-card">
+          <div class="att-device-badge att-device-approved">
+            <span>🔐</span> Registered device active — biometric check-in required
           </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-amber btn-sm" onclick="attDoCheckin('manual')">Submit Request</button>
-            <button class="btn btn-ghost btn-sm" onclick="attHideManualCheckin()">Cancel</button>
+          <div class="att-checkin-status" id="att-loc-status" style="margin-top:12px">
+            <div class="att-loc-icon">📍</div>
+            <div id="att-loc-text" class="muted">Checking your location…</div>
           </div>
-        </div>
-      </div>`;
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button class="btn btn-amber" id="att-checkin-btn" disabled onclick="attWebAuthnCheckin()">
+              Biometric Check-In
+            </button>
+          </div>
+        </div>`;
+    } else {
+      todayPanel = `
+        <div class="att-checkin-card" id="att-checkin-card">
+          ${deviceInfo?.status === 'pending' ? `<div class="att-device-badge att-device-pending"><span>⏳</span> Device registration pending admin approval</div>` : ''}
+          <div class="att-checkin-status" id="att-loc-status" style="margin-top:${deviceInfo?.status === 'pending' ? '10' : '0'}px">
+            <div class="att-loc-icon">📍</div>
+            <div id="att-loc-text" class="muted">Checking your location…</div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button class="btn btn-amber" id="att-checkin-btn" disabled onclick="attDoCheckin('location')">
+              Check In
+            </button>
+            <button class="btn btn-ghost" onclick="attShowManualCheckin()">
+              Request Manual Check-In
+            </button>
+          </div>
+          <div id="att-manual-form" style="display:none;margin-top:14px">
+            <div class="fld">
+              <label>Reason (will be sent to admin for approval)</label>
+              <textarea id="att-manual-remark" rows="2" placeholder="e.g. Phone GPS not working, please verify via CCTV"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-amber btn-sm" onclick="attDoCheckin('manual')">Submit Request</button>
+              <button class="btn btn-ghost btn-sm" onclick="attHideManualCheckin()">Cancel</button>
+            </div>
+          </div>
+        </div>`;}
+  }
   } else if (todayRec.approval_status === 'pending' && !todayRec.check_out_at) {
     todayPanel = `
       <div class="att-checkin-card att-card-pending" id="att-checkin-card">
@@ -2209,12 +2231,12 @@ async function renderAttendance() {
             <div id="att-loc-text" class="muted">Checking your location…</div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-            <button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">
-              Check Out
-            </button>
-            <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>
+            ${hasApprovedDevice
+              ? `<button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" onclick="attWebAuthnCheckout()">Biometric Check-Out</button>`
+              : `<button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">Check Out</button>
+                 <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>`}
           </div>
-          <div id="att-ooo-form" style="display:none;margin-top:12px">
+          ${!hasApprovedDevice ? `<div id="att-ooo-form" style="display:none;margin-top:12px">
             <div class="fld">
               <label>Reason for early leave or remote checkout (required)</label>
               <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
@@ -2223,10 +2245,11 @@ async function renderAttendance() {
               <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
               <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
             </div>
-          </div>
+          </div>` : ''}
         </div>
       </div>`;
   } else if (todayRec.check_in_at && !todayRec.check_out_at) {
+    const ciType = todayRec.check_in_type;
     todayPanel = `
       <div class="att-checkin-card att-card-in" id="att-checkin-card">
         <div class="att-time-row">
@@ -2236,19 +2259,19 @@ async function renderAttendance() {
             <div class="muted small" style="margin-top:2px">Duration: <span id="att-duration-live">${attDuration(todayRec.check_in_at, null)}</span></div>
           </div>
         </div>
-        <div class="att-checkin-status" id="att-loc-status" style="margin-top:12px">
-          <div class="att-loc-icon">📍</div>
-          <div id="att-loc-text" class="muted">Checking your location…</div>
-        </div>
+        ${hasApprovedDevice
+          ? `<div class="att-device-badge att-device-approved" style="margin-top:12px"><span>🔐</span> Biometric check-out required</div>`
+          : `<div class="att-checkin-status" id="att-loc-status" style="margin-top:12px">
+               <div class="att-loc-icon">📍</div>
+               <div id="att-loc-text" class="muted">Checking your location…</div>
+             </div>`}
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
-          <button class="btn" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">
-            Check Out
-          </button>
-          <button class="btn btn-ghost" onclick="attShowOooForm()">
-            Early Leave / Remote Check-Out
-          </button>
+          ${hasApprovedDevice
+            ? `<button class="btn" style="background:var(--red);color:#fff" id="att-checkout-btn" onclick="attWebAuthnCheckout()">Biometric Check-Out</button>`
+            : `<button class="btn" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">Check Out</button>
+               <button class="btn btn-ghost" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>`}
         </div>
-        <div id="att-ooo-form" style="display:none;margin-top:14px">
+        ${!hasApprovedDevice ? `<div id="att-ooo-form" style="display:none;margin-top:14px">
           <div class="fld">
             <label>Reason for early leave or remote checkout (required)</label>
             <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
@@ -2257,7 +2280,7 @@ async function renderAttendance() {
             <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
             <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
           </div>
-        </div>
+        </div>` : ''}
       </div>`;
   } else if (todayRec.check_out_at) {
     const outPending = todayRec.approval_status === 'pending';
@@ -2333,6 +2356,8 @@ async function renderAttendance() {
     </div>
   </div>
 
+  ${attDevicePanel(deviceInfo)}
+
   <div class="card" style="margin-top:14px">
     <h2 style="margin-bottom:12px">Log — ${attMonthLabel(month)}</h2>
     ${(monthRecs || []).length === 0
@@ -2352,11 +2377,13 @@ async function renderAttendance() {
                 <td>${attDuration(r.check_in_at, r.check_out_at)}</td>
                 <td class="muted small">${
                   r.check_in_type === 'location' ? 'GPS' :
-                  r.check_in_type === 'manual'   ? 'Manual' : '—'
+                  r.check_in_type === 'manual'   ? 'Manual' :
+                  r.check_in_type === 'webauthn' ? '🔐 Biometric' : '—'
                 }${r.check_out_type ? ' / ' + (
-                  r.check_out_type === 'location'    ? 'GPS' :
+                  r.check_out_type === 'location'      ? 'GPS' :
                   r.check_out_type === 'out_of_office' ? 'Early leave' :
-                  r.check_out_type === 'manual'      ? 'Manual' : r.check_out_type
+                  r.check_out_type === 'manual'        ? 'Manual' :
+                  r.check_out_type === 'webauthn'      ? '🔐 Biometric' : r.check_out_type
                 ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
               </tr>`).join('')}
@@ -2472,6 +2499,265 @@ async function attDoCheckout(type) {
   }
 }
 
+// ── WebAuthn helpers ──────────────────────────────────────────────────────────
+
+function attB64urlToBuffer(str) {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(padded);
+  return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer;
+}
+
+function attBufferToB64url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function attEncodeCredential(cred) {
+  return {
+    id:       cred.id,
+    rawId:    attBufferToB64url(cred.rawId),
+    type:     cred.type,
+    response: {
+      clientDataJSON:    attBufferToB64url(cred.response.clientDataJSON),
+      attestationObject: cred.response.attestationObject ? attBufferToB64url(cred.response.attestationObject) : undefined,
+      authenticatorData: cred.response.authenticatorData ? attBufferToB64url(cred.response.authenticatorData) : undefined,
+      signature:         cred.response.signature         ? attBufferToB64url(cred.response.signature)         : undefined,
+      userHandle:        cred.response.userHandle        ? attBufferToB64url(cred.response.userHandle)        : undefined,
+      transports:        cred.response.getTransports     ? cred.response.getTransports() : undefined,
+    },
+  };
+}
+
+function attDecodeOptions(opts) {
+  // Decode challenge and allowCredentials / user from base64url to ArrayBuffer
+  if (opts.challenge)    opts.challenge    = attB64urlToBuffer(opts.challenge);
+  if (opts.user?.id)     opts.user.id      = attB64urlToBuffer(opts.user.id);
+  if (opts.allowCredentials) {
+    opts.allowCredentials = opts.allowCredentials.map(c => ({ ...c, id: attB64urlToBuffer(c.id) }));
+  }
+  if (opts.excludeCredentials) {
+    opts.excludeCredentials = opts.excludeCredentials.map(c => ({ ...c, id: attB64urlToBuffer(c.id) }));
+  }
+  return opts;
+}
+
+async function attGetGPS() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => reject(new Error('Location access denied — cannot check in without GPS')),
+      { timeout: 15000, maximumAge: 30000, enableHighAccuracy: true }
+    );
+  });
+}
+
+async function attWebAuthnCheckin() {
+  const btn = document.getElementById('att-checkin-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const opts = await api('POST', '/webauthn/auth/options', { action: 'checkin' });
+    attDecodeOptions(opts);
+    const cred = await navigator.credentials.get({ publicKey: opts });
+    const { lat, lng, accuracy } = await attGetGPS();
+    await api('POST', '/attendance/checkin', { assertion: attEncodeCredential(cred), lat, lng, accuracy });
+    toast('Checked in successfully ✓', 'success');
+    renderView();
+  } catch (ex) {
+    const msg = ex.message || 'Biometric check-in failed';
+    toast(msg.includes('aborted') || msg.includes('cancel') ? 'Check-in cancelled' : msg, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function attWebAuthnCheckout() {
+  const btn = document.getElementById('att-checkout-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const opts = await api('POST', '/webauthn/auth/options', { action: 'checkout' });
+    attDecodeOptions(opts);
+    const cred = await navigator.credentials.get({ publicKey: opts });
+    let gps = {};
+    try { gps = await attGetGPS(); } catch (_) {}
+    await api('POST', '/attendance/checkout', { assertion: attEncodeCredential(cred), ...gps });
+    toast('Checked out successfully ✓', 'success');
+    renderView();
+  } catch (ex) {
+    const msg = ex.message || 'Biometric checkout failed';
+    toast(msg.includes('aborted') || msg.includes('cancel') ? 'Checkout cancelled' : msg, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function attRegisterDevice() {
+  const nameInput = document.getElementById('att-device-name');
+  const deviceName = nameInput?.value.trim() || 'My Phone';
+  const btn = document.getElementById('att-reg-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const opts = await api('POST', '/webauthn/register/options', {});
+    attDecodeOptions(opts);
+    const cred = await navigator.credentials.create({ publicKey: opts });
+    await api('POST', '/webauthn/register/verify', { response: attEncodeCredential(cred), deviceName });
+    toast('Device registered — awaiting admin approval', 'success');
+    G._attDevice = null;
+    renderView();
+  } catch (ex) {
+    const msg = ex.message || 'Device registration failed';
+    toast(msg.includes('aborted') || msg.includes('cancel') ? 'Registration cancelled' : msg, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function attRequestDeviceReplace() {
+  const reason = prompt('Why do you need to replace your device? (e.g. Lost phone, changed phone)');
+  if (!reason?.trim()) return;
+  try {
+    await api('POST', '/webauthn/device/replace', { reason });
+    toast('Replacement requested — you can now register your new device', 'success');
+    G._attDevice = null;
+    renderView();
+  } catch (ex) { toast(ex.message, 'error'); }
+}
+
+function attDevicePanel(device) {
+  if (!device) {
+    return `
+    <div class="card att-device-card" style="margin-top:14px">
+      <h2 style="margin-bottom:6px">Registered Device</h2>
+      <p class="muted small" style="margin-bottom:14px">Register your phone or tablet to enable secure biometric check-in. Admin must approve before it activates.</p>
+      <div class="fld" style="margin-bottom:10px">
+        <label>Device name (optional)</label>
+        <input id="att-device-name" type="text" placeholder="e.g. My Samsung S24" style="max-width:300px">
+      </div>
+      <button class="btn btn-sm btn-amber" id="att-reg-btn" onclick="attRegisterDevice()">Register This Device</button>
+    </div>`;
+  }
+  if (device.status === 'pending') {
+    return `
+    <div class="card att-device-card" style="margin-top:14px">
+      <h2 style="margin-bottom:6px">Registered Device</h2>
+      <div class="att-device-badge att-device-pending" style="margin-bottom:10px"><span>⏳</span> <b>${esc(device.device_name)}</b> — pending admin approval</div>
+      <div class="muted small">Registered on ${new Date(device.registered_at).toLocaleDateString()}. You can still use GPS check-in until your device is approved.</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="attRequestDeviceReplace()">Request Replacement</button>
+    </div>`;
+  }
+  if (device.status === 'approved') {
+    return `
+    <div class="card att-device-card" style="margin-top:14px">
+      <h2 style="margin-bottom:6px">Registered Device</h2>
+      <div class="att-device-badge att-device-approved" style="margin-bottom:10px"><span>✓</span> <b>${esc(device.device_name)}</b> — active</div>
+      <div class="muted small">Approved and active. All check-ins/outs use biometric verification on this device.</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="attRequestDeviceReplace()">Request Device Replacement</button>
+    </div>`;
+  }
+  // rejected / revoked
+  return `
+  <div class="card att-device-card" style="margin-top:14px">
+    <h2 style="margin-bottom:6px">Registered Device</h2>
+    <div class="att-device-badge att-device-revoked" style="margin-bottom:10px"><span>✗</span> Previous device ${device.status}${device.revocation_reason ? ` — ${esc(device.revocation_reason)}` : ''}</div>
+    <div class="fld" style="margin-bottom:10px;margin-top:10px">
+      <label>Device name (optional)</label>
+      <input id="att-device-name" type="text" placeholder="e.g. My Samsung S24" style="max-width:300px">
+    </div>
+    <button class="btn btn-sm btn-amber" id="att-reg-btn" onclick="attRegisterDevice()">Register New Device</button>
+  </div>`;
+}
+
+async function renderAttAdminDevices() {
+  const body = document.getElementById('att-admin-body');
+  body.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  const devs = await api('GET', '/webauthn/admin/devices');
+  if (!devs) return;
+
+  const pending  = devs.filter(d => d.status === 'pending');
+  const approved = devs.filter(d => d.status === 'approved');
+  const others   = devs.filter(d => !['pending','approved'].includes(d.status));
+
+  function devRow(d) {
+    const statusBadge = d.status === 'approved'
+      ? `<span class="att-badge att-present">Approved</span>`
+      : d.status === 'pending'
+      ? `<span class="att-badge att-pending">Pending</span>`
+      : `<span class="att-badge att-rejected">${d.status}</span>`;
+    const actions = d.status === 'pending'
+      ? `<button class="btn btn-sm" style="background:var(--green);color:#fff" onclick="attAdminApproveDevice(${d.id})">Approve</button>
+         <button class="btn btn-sm btn-ghost" onclick="attAdminRejectDevice(${d.id})">Reject</button>`
+      : d.status === 'approved'
+      ? `<button class="btn btn-sm btn-ghost" onclick="attAdminRevokeDevice(${d.id})">Revoke</button>`
+      : '';
+    return `<tr>
+      <td>${esc(d.user_name)}<br><span class="muted small">${esc(d.email)}</span></td>
+      <td><span class="muted small">${esc(d.company)}</span></td>
+      <td>${esc(d.device_name)}<br><span class="muted small" style="font-size:11px">${esc((d.browser_info||'').slice(0,60))}</span></td>
+      <td>${statusBadge}</td>
+      <td class="muted small">${new Date(d.registered_at).toLocaleDateString()}</td>
+      <td>${d.approved_by_name ? `<span class="muted small">${esc(d.approved_by_name)}</span>` : ''}</td>
+      <td style="white-space:nowrap">${actions}</td>
+    </tr>`;
+  }
+
+  body.innerHTML = `
+  <div style="margin-top:10px">
+    ${pending.length ? `
+    <h3 style="margin-bottom:8px">Pending Approval (${pending.length})</h3>
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table class="att-table">
+        <thead><tr><th>Employee</th><th>Company</th><th>Device</th><th>Status</th><th>Registered</th><th>Approved By</th><th>Actions</th></tr></thead>
+        <tbody>${pending.map(devRow).join('')}</tbody>
+      </table>
+    </div>` : '<div class="muted small" style="margin-bottom:16px">No pending device registrations.</div>'}
+
+    ${approved.length ? `
+    <h3 style="margin-bottom:8px">Active Devices (${approved.length})</h3>
+    <div style="overflow-x:auto;margin-bottom:20px">
+      <table class="att-table">
+        <thead><tr><th>Employee</th><th>Company</th><th>Device</th><th>Status</th><th>Registered</th><th>Approved By</th><th>Actions</th></tr></thead>
+        <tbody>${approved.map(devRow).join('')}</tbody>
+      </table>
+    </div>` : ''}
+
+    ${others.length ? `
+    <h3 style="margin-bottom:8px">Inactive (${others.length})</h3>
+    <div style="overflow-x:auto">
+      <table class="att-table">
+        <thead><tr><th>Employee</th><th>Company</th><th>Device</th><th>Status</th><th>Registered</th><th>Approved By</th><th>Actions</th></tr></thead>
+        <tbody>${others.map(devRow).join('')}</tbody>
+      </table>
+    </div>` : ''}
+  </div>`;
+}
+
+async function attAdminApproveDevice(id) {
+  if (!confirm('Approve this device? Any other approved device for this employee will be revoked.')) return;
+  try {
+    await api('PUT', `/webauthn/admin/devices/${id}/approve`, {});
+    toast('Device approved', 'success');
+    renderAttAdminDevices();
+  } catch (ex) { toast(ex.message, 'error'); }
+}
+
+async function attAdminRejectDevice(id) {
+  const reason = prompt('Reason for rejection (optional):') || '';
+  try {
+    await api('PUT', `/webauthn/admin/devices/${id}/reject`, { reason });
+    toast('Device rejected', 'success');
+    renderAttAdminDevices();
+  } catch (ex) { toast(ex.message, 'error'); }
+}
+
+async function attAdminRevokeDevice(id) {
+  const reason = prompt('Reason for revoking this device (required):');
+  if (!reason?.trim()) { toast('Reason is required to revoke', 'error'); return; }
+  try {
+    await api('PUT', `/webauthn/admin/devices/${id}/revoke`, { reason });
+    toast('Device revoked', 'success');
+    renderAttAdminDevices();
+  } catch (ex) { toast(ex.message, 'error'); }
+}
+
 // ── ATTENDANCE — Admin view ────────────────────────────────────────────────────
 function attAdminTab(tab) {
   G._attAdminTab = tab;
@@ -2489,12 +2775,21 @@ async function renderAttendanceAdmin() {
     pendingCount = (pending || []).length;
   } catch (_) {}
 
+  let devicePendingCount = 0;
+  try {
+    const devs = await api('GET', '/webauthn/admin/devices');
+    devicePendingCount = (devs || []).filter(d => d.status === 'pending').length;
+  } catch (_) {}
+
   const tabs = `
   <div class="att-admin-tabs">
     <button class="${tab === 'daily'   ? 'active' : ''}" onclick="attAdminTab('daily')">Daily View</button>
     <button class="${tab === 'monthly' ? 'active' : ''}" onclick="attAdminTab('monthly')">Monthly Report</button>
     <button class="${tab === 'pending' ? 'active' : ''}" onclick="attAdminTab('pending')">
       Pending Approvals${pendingCount ? ` <span class="att-pending-badge">${pendingCount}</span>` : ''}
+    </button>
+    <button class="${tab === 'devices' ? 'active' : ''}" onclick="attAdminTab('devices')">
+      Devices${devicePendingCount ? ` <span class="att-pending-badge">${devicePendingCount}</span>` : ''}
     </button>
   </div>`;
 
@@ -2506,9 +2801,10 @@ async function renderAttendanceAdmin() {
   ${tabs}
   <div id="att-admin-body"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>`;
 
-  if (tab === 'daily')   renderAttAdminDaily();
+  if (tab === 'daily')        renderAttAdminDaily();
   else if (tab === 'monthly') renderAttAdminMonthly();
   else if (tab === 'pending') renderAttAdminPending();
+  else if (tab === 'devices') renderAttAdminDevices();
 }
 
 async function renderAttAdminDaily() {
@@ -2550,7 +2846,12 @@ async function renderAttAdminDaily() {
               <td>${attFmtTime(r.record?.check_in_at)}</td>
               <td>${attFmtTime(r.record?.check_out_at)}</td>
               <td>${r.record ? attDuration(r.record.check_in_at, r.record.check_out_at) : '—'}</td>
-              <td class="muted small">${r.record ? esc(r.record.check_in_type || '') : '—'}</td>
+              <td class="muted small">${r.record ? (
+                r.record.check_in_type === 'webauthn' ? '🔐 Biometric' :
+                r.record.check_in_type === 'location' ? 'GPS' :
+                r.record.check_in_type === 'manual'   ? 'Manual' :
+                esc(r.record.check_in_type || '')
+              ) : '—'}</td>
               <td>
                 <button class="btn btn-ghost btn-sm" onclick="attAdminMarkModal(${r.id},'${esc(r.name)}','${date}',${r.record ? r.record.id : 'null'})">
                   ${r.record ? 'Edit' : 'Mark'}

@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const db     = require('../db');
 const auth   = require('../middleware/auth');
+const { verifyAssertion } = require('./webauthn');
 
 const OFFICE_LAT = 31.441300523433583;
 const OFFICE_LNG = 74.32441912480384;
@@ -79,7 +80,7 @@ router.get('/my', auth, async (req, res) => {
 
 // POST /api/attendance/checkin
 router.post('/checkin', auth, async (req, res) => {
-  const { type, lat, lng, remark } = req.body;
+  const { type, lat, lng, remark, assertion, accuracy } = req.body;
   const today = todayPKT();
   const now   = new Date();
 
@@ -106,11 +107,42 @@ router.post('/checkin', auth, async (req, res) => {
       return res.status(400).json({ error: 'Check-in is not allowed before 7:00 AM. Office opens at 7:00 AM.' });
     }
 
-    const checkInType = type || 'location';
+    // Check whether employee has an approved WebAuthn credential
+    const { rows: credRows } = await db.query(
+      `SELECT id FROM attendance_credentials WHERE user_id = $1 AND status = 'approved' LIMIT 1`,
+      [req.user.id]
+    );
+    const hasApprovedDevice = credRows.length > 0;
+
+    let checkInType;
     let approvalStatus = 'approved';
     let distance = null;
+    let credentialDbId = null;
 
-    if (checkInType === 'location') {
+    if (assertion) {
+      // WebAuthn path
+      checkInType = 'webauthn';
+      const verified = await verifyAssertion(req.user.id, assertion, 'checkin');
+      credentialDbId = verified.credentialDbId;
+
+      // GPS still required for WebAuthn check-in
+      if (lat == null || lng == null) {
+        return res.status(400).json({ error: 'GPS location required for check-in' });
+      }
+      distance = haversineM(OFFICE_LAT, OFFICE_LNG, parseFloat(lat), parseFloat(lng));
+      if (distance > ALLOWED_M) {
+        return res.status(400).json({
+          error: `You are ${Math.round(distance)}m from office (limit: ${ALLOWED_M}m). You must be at the office to check in.`,
+        });
+      }
+    } else if (type === 'location') {
+      if (hasApprovedDevice) {
+        return res.status(403).json({
+          error: 'Your account has a registered device. Please use biometric check-in.',
+          requireWebAuthn: true,
+        });
+      }
+      checkInType = 'location';
       if (lat == null || lng == null) {
         return res.status(400).json({ error: 'Location coordinates required' });
       }
@@ -120,28 +152,45 @@ router.post('/checkin', auth, async (req, res) => {
           error: `You are ${Math.round(distance)}m from office (limit: ${ALLOWED_M}m). Use manual check-in if your GPS is not working.`,
         });
       }
-    } else if (checkInType === 'manual') {
+    } else if (type === 'manual') {
+      if (hasApprovedDevice) {
+        return res.status(403).json({
+          error: 'Your account has a registered device. Please use biometric check-in.',
+          requireWebAuthn: true,
+        });
+      }
+      checkInType = 'manual';
       approvalStatus = 'pending';
     } else {
       return res.status(400).json({ error: 'Invalid check-in type' });
     }
 
     const status = getCheckinStatus(now);
+    const clientIp = req.ip || req.connection?.remoteAddress || null;
+    const userAgent = (req.headers['user-agent'] || '').slice(0, 500);
 
     const { rows } = await db.query(
       `INSERT INTO attendance
          (user_id, date, check_in_at, check_in_lat, check_in_lng,
-          status, check_in_type, checkin_remark, approval_status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          status, check_in_type, checkin_remark, approval_status,
+          att_credential_id, verification_mode, gps_accuracy, client_ip, user_agent_str, verified_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (user_id, date) DO UPDATE
          SET check_in_at = $3, check_in_lat = $4, check_in_lng = $5,
-             status = $6, check_in_type = $7, checkin_remark = $8, approval_status = $9
+             status = $6, check_in_type = $7, checkin_remark = $8, approval_status = $9,
+             att_credential_id = $10, verification_mode = $11, gps_accuracy = $12,
+             client_ip = $13, user_agent_str = $14, verified_at = $15
        RETURNING *`,
       [req.user.id, today, now, lat || null, lng || null,
-       status, checkInType, remark || null, approvalStatus]
+       status, checkInType, remark || null, approvalStatus,
+       credentialDbId, checkInType, accuracy || null, clientIp, userAgent,
+       checkInType === 'webauthn' ? now : null]
     );
     res.json({ ...rows[0], distance });
   } catch (e) {
+    if (e.message && (e.message.includes('challenge') || e.message.includes('verification') || e.message.includes('device'))) {
+      return res.status(400).json({ error: e.message });
+    }
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
@@ -149,7 +198,7 @@ router.post('/checkin', auth, async (req, res) => {
 
 // POST /api/attendance/checkout
 router.post('/checkout', auth, async (req, res) => {
-  const { type, lat, lng, remark } = req.body;
+  const { type, lat, lng, remark, assertion, accuracy } = req.body;
   const today = todayPKT();
   const now   = new Date();
 
@@ -166,11 +215,36 @@ router.post('/checkout', auth, async (req, res) => {
       return res.status(409).json({ error: 'Already checked out today' });
     }
 
-    const checkOutType = type || 'location';
-    let approvalStatus = 'approved';
+    // Check whether employee has an approved WebAuthn credential
+    const { rows: credRows } = await db.query(
+      `SELECT id FROM attendance_credentials WHERE user_id = $1 AND status = 'approved' LIMIT 1`,
+      [req.user.id]
+    );
+    const hasApprovedDevice = credRows.length > 0;
+
+    let checkOutType;
+    let approvalStatus = rec.approval_status; // inherit check-in approval status
     let distance = null;
 
-    if (checkOutType === 'location') {
+    if (assertion) {
+      checkOutType = 'webauthn';
+      await verifyAssertion(req.user.id, assertion, 'checkout');
+
+      if (lat != null && lng != null) {
+        distance = haversineM(OFFICE_LAT, OFFICE_LNG, parseFloat(lat), parseFloat(lng));
+        if (distance > ALLOWED_M) {
+          // Out-of-office WebAuthn checkout — still allowed but flag for review
+          approvalStatus = 'pending';
+        }
+      }
+    } else if (type === 'location') {
+      if (hasApprovedDevice) {
+        return res.status(403).json({
+          error: 'Your account has a registered device. Please use biometric checkout.',
+          requireWebAuthn: true,
+        });
+      }
+      checkOutType = 'location';
       if (lat == null || lng == null) {
         return res.status(400).json({ error: 'Location coordinates required' });
       }
@@ -180,12 +254,20 @@ router.post('/checkout', auth, async (req, res) => {
           error: `You are ${Math.round(distance)}m from office. Use "Out of Office" checkout if you have left early.`,
         });
       }
-    } else if (checkOutType === 'out_of_office') {
+    } else if (type === 'out_of_office') {
       if (!remark || !remark.trim()) {
         return res.status(400).json({ error: 'Reason is required for out-of-office checkout' });
       }
+      checkOutType = 'out_of_office';
       approvalStatus = 'pending';
-    } else if (checkOutType === 'manual') {
+    } else if (type === 'manual') {
+      if (hasApprovedDevice) {
+        return res.status(403).json({
+          error: 'Your account has a registered device. Please use biometric checkout.',
+          requireWebAuthn: true,
+        });
+      }
+      checkOutType = 'manual';
       approvalStatus = 'pending';
     } else {
       return res.status(400).json({ error: 'Invalid checkout type' });
@@ -201,6 +283,9 @@ router.post('/checkout', auth, async (req, res) => {
     );
     res.json({ ...rows[0], distance });
   } catch (e) {
+    if (e.message && (e.message.includes('challenge') || e.message.includes('verification') || e.message.includes('device'))) {
+      return res.status(400).json({ error: e.message });
+    }
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }

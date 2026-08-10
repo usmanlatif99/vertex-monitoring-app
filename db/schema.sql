@@ -136,3 +136,40 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS checkin_remark TEXT;
 CREATE INDEX IF NOT EXISTS idx_att_user_date ON attendance(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_att_date      ON attendance(date);
 CREATE INDEX IF NOT EXISTS idx_att_pending   ON attendance(approval_status) WHERE approval_status = 'pending';
+
+-- WebAuthn device registration
+CREATE TABLE IF NOT EXISTS attendance_credentials (
+  id                SERIAL PRIMARY KEY,
+  user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  credential_id     TEXT NOT NULL UNIQUE,
+  public_key        TEXT NOT NULL,
+  counter           INTEGER NOT NULL DEFAULT 0,
+  transports        TEXT[] NOT NULL DEFAULT '{}',
+  device_name       VARCHAR(200) NOT NULL DEFAULT 'My Phone',
+  browser_info      VARCHAR(500),
+  status            VARCHAR(20) NOT NULL DEFAULT 'pending',
+  registered_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved_by       INTEGER REFERENCES users(id),
+  approved_at       TIMESTAMPTZ,
+  revoked_at        TIMESTAMPTZ,
+  revocation_reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS webauthn_challenges (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  challenge   TEXT NOT NULL UNIQUE,
+  purpose     VARCHAR(50) NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ
+);
+
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS att_credential_id INTEGER REFERENCES attendance_credentials(id);
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS verification_mode VARCHAR(20);
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS gps_accuracy      NUMERIC(8,2);
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS client_ip         VARCHAR(45);
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS user_agent_str    TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS verified_at       TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_att_creds_user ON attendance_credentials(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_webauthn_chal  ON webauthn_challenges(user_id, purpose) WHERE consumed_at IS NULL;
