@@ -2211,7 +2211,6 @@ async function renderAttendance() {
             </div>
           </div>
         </div>`;}
-  }
   } else if (todayRec.approval_status === 'pending' && !todayRec.check_out_at) {
     todayPanel = `
       <div class="att-checkin-card att-card-pending" id="att-checkin-card">
