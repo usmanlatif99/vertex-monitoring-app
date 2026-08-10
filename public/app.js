@@ -440,9 +440,8 @@ function initApp() {
   document.getElementById('app').style.display          = 'block';
 
   const adminViews = ['dashboard','team','assign','dailylogs','users','attendance','myday','password','editTask','archived'];
-  // TESTING PAUSE: 'attendance' removed from empViews — add back to both branches to re-enable for employees
   const empViews   = G.me.attendance_enabled
-    ? ['myday','mytasks','history','password']
+    ? ['myday','mytasks','history','attendance','password']
     : ['myday','mytasks','history','password'];
   const validViews = G.me.role === 'admin' ? adminViews : empViews;
   const hash       = location.hash.slice(1);
@@ -544,9 +543,11 @@ function renderNav() {
     ['archived', 'Archived tasks'], ['myday', 'My day'],
     ['password', 'Change password'],
   ];
-  // TESTING PAUSE: 'attendance' hidden from employee nav — restore both branches to re-enable
-  const empItems = [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
-     ['password', 'Change password']];
+  const empItems = G.me.attendance_enabled
+    ? [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+       ['attendance', 'Attendance'], ['password', 'Change password']]
+    : [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
+       ['password', 'Change password']];
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
   document.getElementById('nav').innerHTML =
