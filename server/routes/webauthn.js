@@ -98,7 +98,7 @@ router.post('/register/verify', auth, async (req, res) => {
     const { id: chalId, challenge } = chalRows[0];
 
     const verification = await verifyRegistrationResponse({
-      credential: response,
+      response,
       expectedChallenge: challenge,
       expectedOrigin:    ORIGIN,
       expectedRPID:      RP_ID,
@@ -110,8 +110,12 @@ router.post('/register/verify', auth, async (req, res) => {
     }
 
     const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
-    const credIdStr  = Buffer.from(credentialID).toString('base64url');
-    const pubKeyStr  = Buffer.from(credentialPublicKey).toString('base64url');
+    const credIdStr  = Buffer.isBuffer(credentialID)
+      ? credentialID.toString('base64url')
+      : Buffer.from(credentialID).toString('base64url');
+    const pubKeyStr  = Buffer.isBuffer(credentialPublicKey)
+      ? credentialPublicKey.toString('base64url')
+      : Buffer.from(credentialPublicKey).toString('base64url');
     const transports = response.response?.transports || [];
     const browserInfo = (req.headers['user-agent'] || '').slice(0, 500);
 
@@ -283,7 +287,7 @@ async function verifyAssertion(userId, assertion, action) {
 
   const cred = credRows[0];
   const verification = await verifyAuthenticationResponse({
-    credential: assertion,
+    response:          assertion,
     expectedChallenge: chalRows[0].challenge,
     expectedOrigin:    ORIGIN,
     expectedRPID:      RP_ID,
