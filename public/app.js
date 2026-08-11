@@ -60,6 +60,16 @@ function initials(name) {
   return (name || '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
+function collabAvatarStack(collaborators) {
+  if (!collaborators || !collaborators.length) return '';
+  const visible = collaborators.slice(0, 3);
+  const extra   = collaborators.length - 3;
+  return `<div class="collab-stack">
+    ${visible.map(c => `<div class="collab-av" title="${esc(c.name)}">${initials(c.name)}</div>`).join('')}
+    ${extra > 0 ? `<div class="collab-av collab-av-extra">+${extra}</div>` : ''}
+  </div>`;
+}
+
 function esc(s) {
   if (s == null) return '';
   return String(s)
@@ -275,9 +285,10 @@ function taskTable(tasks, showWho) {
           onchange="toggleTaskCheck(${t.id}, this.checked)">
       </td>` : ''}
       <td>${codeChip(t)}</td>
-      <td class="task-title">${esc(t.title)}</td>
+      <td class="task-title">${esc(t.title)}${!showWho && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}</td>
       ${showWho ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
-        <span class="small muted">${esc(t.assignee_dept || '')}</span></td>` : ''}
+        <span class="small muted">${esc(t.assignee_dept || '')}</span>
+        ${(t.collaborators || []).length ? collabAvatarStack(t.collaborators) : ''}</td>` : ''}
       <td>${prPill(t)}</td>
       <td>${stPill(t)}</td>
       <td>${duePill(t)}</td>
@@ -623,7 +634,7 @@ async function renderMyDay() {
   ]);
 
   const pending = (myTasks || []).filter(t =>
-    !['completed', 'cancelled'].includes(t.status) && t.assignee_id === G.me.id
+    !['completed', 'cancelled'].includes(t.status)
   );
   const logs    = todayLogs || [];
   const opts    = pending.map(t =>
@@ -684,17 +695,20 @@ async function renderMyDay() {
     <div class="card">
       <h2 style="margin-bottom:10px">My pending tasks</h2>
       ${pending.length
-        ? pending.map(t => `
+        ? pending.map(t => {
+          const isCollab = t.assignee_id !== G.me.id;
+          return `
           <div class="task-mini" onclick="openTask(${t.id})">
-            <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px">
+            <div style="display:flex;gap:7px;align-items:center;margin-bottom:4px;flex-wrap:wrap">
               ${codeChip(t)} ${prPill(t)}
+              ${isCollab ? '<span class="collab-badge">Collaborating</span>' : ''}
             </div>
             <div class="task-mini-title">${esc(t.title)}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
               ${duePill(t)}
               <div style="display:flex;align-items:center;gap:6px"><div class="progress" style="width:60px"><i style="width:${taskPct(t)}%"></i></div><span style="font-size:11px;font-weight:600;color:var(--ink)">${taskPct(t)}%</span></div>
             </div>
-          </div>`).join('')
+          </div>`;}).join('')
         : '<div class="empty">No pending tasks assigned to you</div>'}
     </div>
   </div>`;
@@ -1233,10 +1247,12 @@ async function renderDetail(id) {
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
 
-  const pct          = taskPct(task);
-  const backView     = isAdmin ? 'team' : 'mytasks';
-  const canAct       = isAdmin || task.assignee_id === G.me.id;
-  const companyUsers = (allUsers || []).filter(u => u.active);
+  const pct            = taskPct(task);
+  const backView       = isAdmin ? 'team' : 'mytasks';
+  const isCollaborator = (task.collaborators || []).some(c => c.id === G.me.id);
+  const canAct         = isAdmin || task.assignee_id === G.me.id || isCollaborator;
+  const canManageCollabs = isAdmin || task.assignee_id === G.me.id;
+  const companyUsers   = (allUsers || []).filter(u => u.active);
 
   main.innerHTML = `
   <button class="backlink" onclick="go('${backView}')">← Back to tasks</button>
@@ -1251,6 +1267,7 @@ async function renderDetail(id) {
         ${task.assignee_dept ? ` (${esc(task.assignee_dept)})` : ''}
         · by ${esc(task.created_by_name || '—')}
         · created ${fmt(task.created_at)}
+        ${isCollaborator ? ' · <span class="collab-badge">You are collaborating</span>' : ''}
       </div>
     </div>
     ${canAct ? `<div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1362,6 +1379,30 @@ async function renderDetail(id) {
       </div>` : ''}
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+        <div class="small" style="margin-bottom:10px;font-weight:600">Collaborators</div>
+        ${(task.collaborators || []).length
+          ? (task.collaborators || []).map(c => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="collab-av">${initials(c.name)}</div>
+                <span style="font-size:13.5px">${esc(c.name)}</span>
+              </div>
+              ${canManageCollabs ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 8px;font-size:12px" onclick="removeCollaborator(${task.id},${c.id})">Remove</button>` : ''}
+            </div>`).join('')
+          : '<div class="muted small" style="padding:2px 0">No collaborators yet</div>'}
+        ${canManageCollabs && companyUsers.length > 0 ? `
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <select id="collab-sel" style="flex:1;margin:0">
+            <option value="">Add collaborator…</option>
+            ${companyUsers
+              .filter(u => u.id !== task.assignee_id && !(task.collaborators || []).some(c => c.id === u.id))
+              .map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-sm" onclick="addCollaborator(${task.id})">Add</button>
+        </div>` : ''}
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
         <div class="small muted" style="margin-bottom:6px">
           Created ${fmt(task.created_at)} · Updated ${fmt(task.updated_at)}
         </div>
@@ -1453,6 +1494,29 @@ async function reassignTask(taskId) {
   try {
     await api('PUT', `/tasks/${taskId}`, { assignee_id });
     toast('Task reassigned', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function addCollaborator(taskId) {
+  const sel = document.getElementById('collab-sel');
+  if (!sel || !sel.value) return;
+  const user_id = parseInt(sel.value, 10);
+  try {
+    await api('POST', `/tasks/${taskId}/collaborators`, { user_id });
+    toast('Collaborator added', 'success');
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function removeCollaborator(taskId, userId) {
+  try {
+    await api('DELETE', `/tasks/${taskId}/collaborators/${userId}`);
+    toast('Collaborator removed', 'success');
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');

@@ -545,3 +545,27 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
 
 /* Devices admin table — reuse att-table */
 .att-badge.att-rejected { background: var(--red-s); color: var(--red); }
+
+/* ── Collaborator avatars & badge ──────────────────────────────────────────── */
+.collab-stack {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 5px;
+}
+.collab-av {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 9px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 2px solid var(--card);
+  margin-left: -6px;
+  flex-shrink: 0;
+}
+.collab-stack .collab-av:first-child { margin-left: 0; }
+.collab-av-extra { background: var(--ink-soft); font-size: 8px; }
+.collab-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 10px;
+  background: var(--blue-s); color: var(--accent);
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}

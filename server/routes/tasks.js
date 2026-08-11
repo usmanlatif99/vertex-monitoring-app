@@ -10,12 +10,15 @@ const TASK_SELECT = `
     u.department AS assignee_dept,
     cb.name      AS created_by_name,
     COALESCE(
-      json_agg(o ORDER BY o.sort_order) FILTER (WHERE o.id IS NOT NULL), '[]'
-    ) AS objectives
+      (SELECT json_agg(o ORDER BY o.sort_order) FROM objectives o WHERE o.task_id = t.id), '[]'
+    ) AS objectives,
+    COALESCE(
+      (SELECT json_agg(jsonb_build_object('id', cu.id, 'name', cu.name) ORDER BY cu.name)
+       FROM task_collaborators tc JOIN users cu ON cu.id = tc.user_id WHERE tc.task_id = t.id), '[]'
+    ) AS collaborators
   FROM tasks t
   LEFT JOIN users u  ON u.id  = t.assignee_id
   LEFT JOIN users cb ON cb.id = t.created_by
-  LEFT JOIN objectives o ON o.task_id = t.id
 `;
 
 // List tasks
@@ -35,7 +38,9 @@ router.get('/', auth, async (req, res) => {
 
   if (!isAdmin) {
     params.push(req.user.id);
-    conds.push(`t.assignee_id = $${params.length}`);
+    conds.push(`(t.assignee_id = $${params.length} OR EXISTS (
+      SELECT 1 FROM task_collaborators tc WHERE tc.task_id = t.id AND tc.user_id = $${params.length}
+    ))`);
   } else if (assignee_id) {
     params.push(assignee_id);
     conds.push(`t.assignee_id = $${params.length}`);
@@ -56,7 +61,6 @@ router.get('/', auth, async (req, res) => {
   try {
     const { rows } = await db.query(
       `${TASK_SELECT} ${where}
-       GROUP BY t.id, u.name, u.department, cb.name
        ORDER BY
          CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
          t.due_date ASC NULLS LAST,
@@ -73,13 +77,10 @@ router.get('/', auth, async (req, res) => {
 // Get single task
 router.get('/:id', auth, async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `${TASK_SELECT} WHERE t.id = $1
-       GROUP BY t.id, u.name, u.department, cb.name`,
-      [req.params.id]
-    );
+    const { rows } = await db.query(`${TASK_SELECT} WHERE t.id = $1`, [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Task not found' });
-    if (req.user.role !== 'admin' && rows[0].assignee_id !== req.user.id) {
+    const isCollab = (rows[0].collaborators || []).some(c => c.id === req.user.id);
+    if (req.user.role !== 'admin' && rows[0].assignee_id !== req.user.id && !isCollab) {
       return res.status(403).json({ error: 'Access denied' });
     }
     res.json(rows[0]);
@@ -133,7 +134,7 @@ router.post('/', auth, async (req, res) => {
     await client.query('COMMIT');
 
     const { rows } = await client.query(
-      `${TASK_SELECT} WHERE t.id = $1 GROUP BY t.id, u.name, u.department, cb.name`,
+      `${TASK_SELECT} WHERE t.id = $1`,
       [taskId]
     );
     res.status(201).json(rows[0]);
@@ -162,14 +163,19 @@ router.put('/:id', auth, async (req, res) => {
   const { title, description, priority, due_date, status, assignee_id } = req.body;
 
   try {
-    // Fetch current task state (needed for access check + status-change email)
-    const { rows: cur } = await db.query('SELECT assignee_id, status FROM tasks WHERE id=$1', [req.params.id]);
+    const { rows: cur } = await db.query(
+      `SELECT t.assignee_id, t.status,
+       EXISTS (SELECT 1 FROM task_collaborators WHERE task_id = $1 AND user_id = $2) AS is_collaborator
+       FROM tasks t WHERE t.id = $1`,
+      [req.params.id, req.user.id]
+    );
     if (!cur[0]) return res.status(404).json({ error: 'Task not found' });
     const oldStatus = cur[0].status;
 
     if (!isAdmin) {
-      // Employees can only change status of their own tasks
-      if (cur[0].assignee_id !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+      if (cur[0].assignee_id !== req.user.id && !cur[0].is_collaborator) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
       if (status) await db.query(
         'UPDATE tasks SET status=$1, updated_at=NOW() WHERE id=$2', [status, req.params.id]
       );
@@ -191,13 +197,10 @@ router.put('/:id', auth, async (req, res) => {
       await db.query(`UPDATE tasks SET ${cols.join(',')} WHERE id=$${vals.length}`, vals);
     }
 
-    const { rows } = await db.query(
-      `${TASK_SELECT} WHERE t.id=$1 GROUP BY t.id, u.name, u.department, cb.name`,
-      [req.params.id]
-    );
+    const { rows } = await db.query(`${TASK_SELECT} WHERE t.id=$1`, [req.params.id]);
     res.json(rows[0]);
 
-    // Fire-and-forget: notify admins when status changes
+    // Fire-and-forget: notify admins + collaborators when status changes
     if (status && status !== oldStatus) {
       (async () => {
         try {
@@ -205,11 +208,26 @@ router.put('/:id', auth, async (req, res) => {
             "SELECT email FROM users WHERE role='admin' AND active=true AND id != $1",
             [req.user.id]
           );
-          await email.statusChanged(rows[0], oldStatus, status, req.user.name, admins.map(a => a.email));
+          const { rows: collabs } = await db.query(
+            `SELECT u.id, u.email FROM task_collaborators tc
+             JOIN users u ON u.id = tc.user_id WHERE tc.task_id = $1`,
+            [req.params.id]
+          );
+          const collabEmails = collabs.filter(c => c.id !== req.user.id).map(c => c.email);
+          const allEmails = [...new Set([...admins.map(a => a.email), ...collabEmails])];
+          await email.statusChanged(rows[0], oldStatus, status, req.user.name, allEmails);
           await push.toAdmins({
             title: `[${rows[0].code}] Status updated`,
             body:  `${req.user.name} → ${status.replace('_', ' ')}`,
           }, req.user.id);
+          for (const c of collabs) {
+            if (c.id !== req.user.id) {
+              await push.toUser(c.id, {
+                title: `[${rows[0].code}] Status updated`,
+                body:  `${req.user.name} → ${status.replace('_', ' ')}`,
+              });
+            }
+          }
         } catch (e) { console.error('[notify]', e.message); }
       })();
     }
@@ -253,9 +271,14 @@ router.patch('/:id/archive', auth, async (req, res) => {
 router.put('/:id/objectives/:objId', auth, async (req, res) => {
   const { done } = req.body;
   try {
-    const { rows: tRows } = await db.query('SELECT assignee_id, status FROM tasks WHERE id=$1', [req.params.id]);
+    const { rows: tRows } = await db.query(
+      `SELECT t.assignee_id, t.status,
+       EXISTS (SELECT 1 FROM task_collaborators WHERE task_id = $1 AND user_id = $2) AS is_collaborator
+       FROM tasks t WHERE t.id = $1`,
+      [req.params.id, req.user.id]
+    );
     if (!tRows[0]) return res.status(404).json({ error: 'Task not found' });
-    if (req.user.role !== 'admin' && tRows[0].assignee_id !== req.user.id) {
+    if (req.user.role !== 'admin' && tRows[0].assignee_id !== req.user.id && !tRows[0].is_collaborator) {
       return res.status(403).json({ error: 'Access denied' });
     }
     const { rows } = await db.query(
@@ -280,6 +303,62 @@ router.put('/:id/objectives/:objId', auth, async (req, res) => {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Add collaborator (admin or primary assignee)
+router.post('/:id/collaborators', auth, async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+  try {
+    const { rows: tRows } = await db.query(
+      'SELECT assignee_id, code, title FROM tasks WHERE id=$1 AND archived=false', [req.params.id]
+    );
+    if (!tRows[0]) return res.status(404).json({ error: 'Task not found' });
+    if (req.user.role !== 'admin' && tRows[0].assignee_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only admin or assignee can add collaborators' });
+    }
+    if (parseInt(user_id) === tRows[0].assignee_id) {
+      return res.status(400).json({ error: 'Task assignee cannot be added as a collaborator' });
+    }
+    await db.query(
+      `INSERT INTO task_collaborators (task_id, user_id, added_by)
+       VALUES ($1,$2,$3) ON CONFLICT (task_id, user_id) DO NOTHING`,
+      [req.params.id, user_id, req.user.id]
+    );
+    const { rows } = await db.query(`${TASK_SELECT} WHERE t.id=$1`, [req.params.id]);
+    res.json(rows[0]);
+
+    // Notify new collaborator
+    (async () => {
+      try {
+        const { rows: cu } = await db.query('SELECT email FROM users WHERE id=$1', [user_id]);
+        if (cu[0]) {
+          await email.collaboratorAdded(rows[0], cu[0].email);
+          await push.toUser(parseInt(user_id), {
+            title: 'Added as collaborator',
+            body:  `${rows[0].code}: ${rows[0].title}`,
+          });
+        }
+      } catch (e) { console.error('[notify-collab]', e.message); }
+    })();
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Remove collaborator (admin or primary assignee)
+router.delete('/:id/collaborators/:userId', auth, async (req, res) => {
+  try {
+    const { rows: tRows } = await db.query('SELECT assignee_id FROM tasks WHERE id=$1', [req.params.id]);
+    if (!tRows[0]) return res.status(404).json({ error: 'Task not found' });
+    if (req.user.role !== 'admin' && tRows[0].assignee_id !== req.user.id) {
+      return res.status(403).json({ error: 'Only admin or assignee can remove collaborators' });
+    }
+    await db.query(
+      'DELETE FROM task_collaborators WHERE task_id=$1 AND user_id=$2',
+      [req.params.id, req.params.userId]
+    );
+    const { rows } = await db.query(`${TASK_SELECT} WHERE t.id=$1`, [req.params.id]);
+    res.json(rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
 module.exports = router;

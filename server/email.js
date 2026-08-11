@@ -120,6 +120,21 @@ module.exports = {
     }
   },
 
+  async collaboratorAdded(task, collabEmail) {
+    const html = shell(`
+      <h2 style="margin:0 0 6px;color:#1a2332;font-size:17px">You've Been Added as a Collaborator</h2>
+      <p style="color:#6b7a90;margin:0 0 4px">You now have full access to collaborate on this task.</p>
+      <table style="width:100%;border-collapse:collapse;margin:14px 0">
+        ${taskRow('Task',     `<strong>${task.code}</strong> — ${task.title}`)}
+        ${taskRow('Assignee', task.assignee_name || '—')}
+        ${taskRow('Priority', task.priority ? task.priority[0].toUpperCase() + task.priority.slice(1) : '—')}
+        ${taskRow('Deadline', task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : 'Not set')}
+      </table>
+      ${btn()}
+    `);
+    await send(collabEmail, `[${task.code}] You've been added as a collaborator`, html);
+  },
+
   async passwordReset(user, resetUrl) {
     const html = shell(`
       <h2 style="margin:0 0 6px;color:#1a2332;font-size:17px">Reset Your Password</h2>

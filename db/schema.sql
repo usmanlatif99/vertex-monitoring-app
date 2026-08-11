@@ -173,3 +173,15 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS verified_at       TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_att_creds_user ON attendance_credentials(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_webauthn_chal  ON webauthn_challenges(user_id, purpose) WHERE consumed_at IS NULL;
+
+-- Task collaboration
+CREATE TABLE IF NOT EXISTS task_collaborators (
+  id       SERIAL      PRIMARY KEY,
+  task_id  INTEGER     NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id  INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  added_by INTEGER     NOT NULL REFERENCES users(id),
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(task_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_collab_task ON task_collaborators(task_id);
+CREATE INDEX IF NOT EXISTS idx_collab_user ON task_collaborators(user_id);

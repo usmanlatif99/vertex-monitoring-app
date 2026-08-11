@@ -70,21 +70,30 @@ router.post('/', auth, async (req, res) => {
         const { rows: admins } = await db.query(
           "SELECT id, email FROM users WHERE role='admin' AND active=true"
         );
+        const { rows: collabs } = await db.query(
+          `SELECT u.id, u.email FROM task_collaborators tc
+           JOIN users u ON u.id = tc.user_id WHERE tc.task_id = $1`,
+          [task_id]
+        );
+        const collabEmails = collabs.filter(c => c.id !== commenter.id).map(c => c.email);
 
         let recipientEmails = [];
         if (commenter.role === 'employee') {
-          // employee comment → notify all admins
-          recipientEmails = admins.filter(a => a.id !== commenter.id).map(a => a.email);
+          // employee comment → notify admins + collaborators
+          const adminEmails = admins.filter(a => a.id !== commenter.id).map(a => a.email);
+          recipientEmails = [...new Set([...adminEmails, ...collabEmails])];
         } else {
-          // admin comment → notify the task assignee (if not the commenter)
-          if (task.assignee_id !== commenter.id) recipientEmails = [task.assignee_email];
+          // admin comment → notify assignee (if not commenter) + collaborators
+          const toNotify = [];
+          if (task.assignee_id !== commenter.id) toNotify.push(task.assignee_email);
+          recipientEmails = [...new Set([...toNotify, ...collabEmails])];
         }
 
         if (recipientEmails.length) {
           await email.newComment(task, commenter.name, rows[0].text, recipientEmails);
         }
 
-        // Push notification
+        // Push notifications
         const pushPayload = {
           title: `[${task.code}] New comment`,
           body:  `${commenter.name}: ${rows[0].text.slice(0, 80)}`,
@@ -93,6 +102,9 @@ router.post('/', auth, async (req, res) => {
           await push.toAdmins(pushPayload, commenter.id);
         } else {
           if (task.assignee_id !== commenter.id) await push.toUser(task.assignee_id, pushPayload);
+        }
+        for (const c of collabs) {
+          if (c.id !== commenter.id) await push.toUser(c.id, pushPayload);
         }
       } catch (e) { console.error('[notify]', e.message); }
     })();
