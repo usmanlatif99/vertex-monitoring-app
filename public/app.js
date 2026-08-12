@@ -1379,19 +1379,28 @@ async function renderDetail(id) {
       </div>` : ''}
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
-        <div class="small" style="margin-bottom:10px;font-weight:600">Collaborators</div>
-        ${(task.collaborators || []).length
-          ? (task.collaborators || []).map(c => `
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="collab-av">${initials(c.name)}</div>
-                <span style="font-size:13.5px">${esc(c.name)}</span>
-              </div>
-              ${canManageCollabs ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 8px;font-size:12px" onclick="removeCollaborator(${task.id},${c.id})">Remove</button>` : ''}
-            </div>`).join('')
-          : '<div class="muted small" style="padding:2px 0">No collaborators yet</div>'}
+        <div class="small" style="margin-bottom:10px;font-weight:600">Task Team</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="collab-av" style="background:var(--navy)">${initials(task.assignee_name)}</div>
+            <span style="font-size:13.5px">${esc(task.assignee_name || '—')}</span>
+          </div>
+          <span style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px">Assignee</span>
+        </div>
+        ${(task.collaborators || []).map(c => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="collab-av">${initials(c.name)}</div>
+              <span style="font-size:13.5px">${esc(c.name)}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">Collab</span>
+              ${canManageCollabs ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:11px" onclick="removeCollaborator(${task.id},${c.id})">✕</button>` : ''}
+            </div>
+          </div>`).join('')}
+        ${!(task.collaborators || []).length ? '<div class="muted small" style="padding:2px 0 6px">No collaborators yet</div>' : ''}
         ${canManageCollabs && companyUsers.length > 0 ? `
-        <div style="display:flex;gap:8px;margin-top:10px">
+        <div style="display:flex;gap:8px;margin-top:8px">
           <select id="collab-sel" style="flex:1;margin:0">
             <option value="">Add collaborator…</option>
             ${companyUsers
