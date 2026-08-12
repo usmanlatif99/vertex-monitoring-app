@@ -1385,7 +1385,7 @@ async function renderDetail(id) {
             <div class="collab-av" style="background:var(--navy)">${initials(task.assignee_name)}</div>
             <span style="font-size:13.5px">${esc(task.assignee_name || '—')}</span>
           </div>
-          <span style="font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.4px">Assignee</span>
+          <span style="font-size:11px;font-weight:600;color:var(--ink-soft)">Assignee</span>
         </div>
         ${(task.collaborators || []).map(c => `
           <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
@@ -1394,7 +1394,7 @@ async function renderDetail(id) {
               <span style="font-size:13.5px">${esc(c.name)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.4px">Collab</span>
+              <span style="font-size:11px;font-weight:600;color:var(--accent)">Collaborator</span>
               ${canManageCollabs ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:11px" onclick="removeCollaborator(${task.id},${c.id})">✕</button>` : ''}
             </div>
           </div>`).join('')}
