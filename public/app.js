@@ -1253,6 +1253,7 @@ async function renderDetail(id) {
   const canAct         = isAdmin || task.assignee_id === G.me.id || isCollaborator;
   const canManageCollabs = isAdmin || task.assignee_id === G.me.id;
   const companyUsers   = (allUsers || []).filter(u => u.active);
+  G._detailUsers       = companyUsers;
 
   main.innerHTML = `
   <button class="backlink" onclick="go('${backView}')">← Back to tasks</button>
@@ -1380,35 +1381,7 @@ async function renderDetail(id) {
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
         <div class="small" style="margin-bottom:10px;font-weight:600">Task Team</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="collab-av" style="background:var(--navy)">${initials(task.assignee_name)}</div>
-            <span style="font-size:13.5px">${esc(task.assignee_name || '—')}</span>
-          </div>
-          <span style="font-size:11px;font-weight:600;color:var(--ink-soft)">Assignee</span>
-        </div>
-        ${(task.collaborators || []).map(c => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="collab-av">${initials(c.name)}</div>
-              <span style="font-size:13.5px">${esc(c.name)}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-size:11px;font-weight:600;color:var(--accent)">Collaborator</span>
-              ${canManageCollabs ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:11px" onclick="removeCollaborator(${task.id},${c.id})">✕</button>` : ''}
-            </div>
-          </div>`).join('')}
-        ${!(task.collaborators || []).length ? '<div class="muted small" style="padding:2px 0 6px">No collaborators yet</div>' : ''}
-        ${canManageCollabs && companyUsers.length > 0 ? `
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <select id="collab-sel" style="flex:1;margin:0">
-            <option value="">Add collaborator…</option>
-            ${companyUsers
-              .filter(u => u.id !== task.assignee_id && !(task.collaborators || []).some(c => c.id === u.id))
-              .map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
-          </select>
-          <button class="btn btn-sm" onclick="addCollaborator(${task.id})">Add</button>
-        </div>` : ''}
+        <div id="task-team-panel">${buildTeamPanel(task, G.me)}</div>
       </div>
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
@@ -1907,7 +1880,71 @@ function startCommentPolling(taskId) {
         }
       }
     } catch (e) { /* ignore transient poll errors */ }
+
+    // Check for collaborator / assignee changes
+    try {
+      const fresh = await api('GET', `/tasks/${taskId}`);
+      if (!fresh) return;
+
+      // Assignee changed
+      const assigneeEl = document.getElementById('team-assignee-name');
+      if (assigneeEl && assigneeEl.dataset.assigneeId !== String(fresh.assignee_id)) {
+        const panel = document.getElementById('task-team-panel');
+        if (panel) panel.innerHTML = buildTeamPanel(fresh, G.me);
+      }
+
+      // Collaborators changed
+      const collabEl = document.getElementById('task-team-panel');
+      if (collabEl) {
+        const currentIds = [...collabEl.querySelectorAll('[data-collab-id]')]
+          .map(el => el.dataset.collabId).sort().join(',');
+        const freshIds   = (fresh.collaborators || []).map(c => String(c.id)).sort().join(',');
+        if (currentIds !== freshIds) {
+          collabEl.innerHTML = buildTeamPanel(fresh, G.me);
+        }
+      }
+    } catch (e) { /* ignore */ }
   }, 5000);
+}
+
+function buildTeamPanel(task, me) {
+  const canManage  = me.role === 'admin' || task.assignee_id === me.id;
+  const allUsers   = G._detailUsers || [];
+  const available  = allUsers.filter(u =>
+    u.id !== task.assignee_id && !(task.collaborators || []).some(c => c.id === u.id)
+  );
+  const collabSel = canManage && available.length
+    ? `<div style="display:flex;gap:8px;margin-top:8px">
+        <select id="collab-sel" style="flex:1;margin:0">
+          <option value="">Add collaborator…</option>
+          ${available.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm" onclick="addCollaborator(${task.id})">Add</button>
+       </div>`
+    : '';
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0"
+         id="team-assignee-name" data-assignee-id="${task.assignee_id}">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="collab-av" style="background:var(--navy)">${initials(task.assignee_name)}</div>
+        <span style="font-size:13.5px">${esc(task.assignee_name || '—')}</span>
+      </div>
+      <span style="font-size:11px;font-weight:600;color:var(--ink-soft)">Assignee</span>
+    </div>
+    ${(task.collaborators || []).map(c => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0"
+           data-collab-id="${c.id}">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="collab-av">${initials(c.name)}</div>
+          <span style="font-size:13.5px">${esc(c.name)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:11px;font-weight:600;color:var(--accent)">Collaborator</span>
+          ${canManage ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:11px" onclick="removeCollaborator(${task.id},${c.id})">✕</button>` : ''}
+        </div>
+      </div>`).join('')}
+    ${!(task.collaborators || []).length ? '<div class="muted small" style="padding:2px 0 6px">No collaborators yet</div>' : ''}
+    ${collabSel}`;
 }
 
 function workUpdateBadge() {
