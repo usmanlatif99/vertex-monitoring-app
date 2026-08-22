@@ -2643,7 +2643,7 @@ function attEncodeCredential(cred) {
 function attDecodeOptions(opts) {
   // Decode challenge and allowCredentials / user from base64url to ArrayBuffer
   if (opts.challenge)    opts.challenge    = attB64urlToBuffer(opts.challenge);
-  if (opts.user?.id)     opts.user.id      = attB64urlToBuffer(opts.user.id);
+  if (opts.user?.id)     opts.user.id      = new TextEncoder().encode(String(opts.user.id));
   if (opts.allowCredentials) {
     opts.allowCredentials = opts.allowCredentials.map(c => ({ ...c, id: attB64urlToBuffer(c.id) }));
   }
