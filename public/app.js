@@ -2611,8 +2611,9 @@ async function attDoCheckout(type) {
 // ── WebAuthn helpers ──────────────────────────────────────────────────────────
 
 function attB64urlToBuffer(str) {
-  const padded = str.replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(padded);
+  const base64  = str.replace(/-/g, '+').replace(/_/g, '/');
+  const padded  = base64 + '='.repeat((4 - base64.length % 4) % 4);
+  const bin     = atob(padded);
   return Uint8Array.from(bin, c => c.charCodeAt(0)).buffer;
 }
 
