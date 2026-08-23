@@ -275,37 +275,46 @@ function dashTaskList(tasks) {
 }
 
 // ── Task table ─────────────────────────────────────────────────────────────────
+function taskRowHtml(t, showWho, showAssigneeCol) {
+  var rowCls = '';
+  if (t.created_by_role === 'employee') {
+    rowCls = t.created_by === t.assignee_id ? ' emp-self-task-row' : ' emp-task-row';
+  }
+  var chkCell = showWho
+    ? '<td style="text-align:center" onclick="event.stopPropagation()"><input type="checkbox" class="task-chk" value="' + t.id + '" ' + (G._selectedIds.has(t.id) ? 'checked' : '') + ' onchange="toggleTaskCheck(' + t.id + ', this.checked)"></td>'
+    : '';
+  var collabBadge = (!showAssigneeCol && t.assignee_id !== G.me.id) ? ' <span class="collab-badge">Collaborating</span>' : '';
+  var assignedBy = (t.created_by_role === 'employee' && t.created_by_name)
+    ? '<br><span class="small muted" style="font-weight:400">Assigned by ' + esc(t.created_by_name) + '</span>'
+    : '';
+  var assigneeCell = showAssigneeCol
+    ? '<td><span style="font-weight:500">' + esc(t.assignee_name || '—') + '</span><br><span class="small muted">' + esc(t.assignee_dept || '') + '</span>' + ((t.collaborators || []).length ? collabAvatarStack(t.collaborators) : '') + '</td>'
+    : '';
+  var pct = taskPct(t);
+  var progressCell = '<td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:' + pct + '%;background:' + progressColor(t) + '"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">' + pct + '%</span></div></td>';
+  return '<tr class="click' + rowCls + '" onclick="openTask(' + t.id + ')">'
+    + chkCell
+    + '<td>' + codeChip(t) + '</td>'
+    + '<td class="task-title">' + esc(t.title) + collabBadge + assignedBy + '</td>'
+    + assigneeCell
+    + '<td>' + prPill(t) + '</td>'
+    + '<td>' + stPill(t) + '</td>'
+    + '<td>' + duePill(t) + '</td>'
+    + progressCell
+    + '</tr>';
+}
+
 function taskTable(tasks, showWho, showAssignee) {
   if (!tasks.length) return '<div class="empty">No tasks found</div>';
-  const allChecked = tasks.length > 0 && tasks.every(t => G._selectedIds.has(t.id));
-  const showAssigneeCol = showWho || showAssignee;
-  return `<div class="table-wrap"><table>
-    <thead><tr>
-      ${showWho ? `<th style="width:36px;text-align:center"><input type="checkbox" ${allChecked ? 'checked' : ''} title="Select all" onchange="toggleAllCheck(this.checked)"></th>` : ''}
-      <th>Task ID</th><th>Task</th>
-      ${showAssigneeCol ? '<th>Assigned to</th>' : ''}
-      <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
-    </tr></thead>
-    <tbody>
-    ${tasks.map(t => { const _rc = t.created_by_role === 'employee' ? (t.created_by === t.assignee_id ? ' emp-self-task-row' : ' emp-task-row') : ''; return `<tr class="click${_rc}" onclick="openTask(${t.id})">
-      ${showWho ? `<td style="text-align:center" onclick="event.stopPropagation()">
-        <input type="checkbox" class="task-chk" value="${t.id}" ${G._selectedIds.has(t.id) ? 'checked' : ''}
-          onchange="toggleTaskCheck(${t.id}, this.checked)">
-      </td>` : ''}
-      <td>${codeChip(t)}</td>
-      <td class="task-title">
-        ${esc(t.title)}${!showAssigneeCol && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}
-        ${t.created_by_role === 'employee' && t.created_by_name ? `<br><span class="small muted" style="font-weight:400">Assigned by ${esc(t.created_by_name)}</span>` : ''}
-      </td>
-      ${showAssigneeCol ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
-        <span class="small muted">${esc(t.assignee_dept || '')}</span>
-        ${(t.collaborators || []).length ? collabAvatarStack(t.collaborators) : ''}</td>` : ''}
-      <td>${prPill(t)}</td>
-      <td>${stPill(t)}</td>
-      <td>${duePill(t)}</td>
-      <td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:${taskPct(t)}%;background:${progressColor(t)}"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">${taskPct(t)}%</span></div></td>
-    </tr>`; }).join('')}
-    </tbody></table></div>`;
+  var allChecked = tasks.length > 0 && tasks.every(function(t) { return G._selectedIds.has(t.id); });
+  var showAssigneeCol = showWho || showAssignee;
+  var chkTh = showWho ? '<th style="width:36px;text-align:center"><input type="checkbox" ' + (allChecked ? 'checked' : '') + ' title="Select all" onchange="toggleAllCheck(this.checked)"></th>' : '';
+  var assigneeTh = showAssigneeCol ? '<th>Assigned to</th>' : '';
+  var rows = tasks.map(function(t) { return taskRowHtml(t, showWho, showAssigneeCol); }).join('');
+  return '<div class="table-wrap"><table>'
+    + '<thead><tr>' + chkTh + '<th>Task ID</th><th>Task</th>' + assigneeTh + '<th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table></div>';
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────────
