@@ -204,11 +204,14 @@ function updateTeamTable() {
 function updateMyTable() {
   const el = document.getElementById('my-table');
   if (!el) return;
-  const filtered = applyTaskFilters(G._myTasks, G.mf);
+  const base = G._myTaskTab === 'assignedby'
+    ? G._myTasks.filter(t => t.created_by === G.me.id && t.assignee_id !== G.me.id)
+    : G._myTasks;
+  const filtered  = applyTaskFilters(base, G.mf);
   const hasFilter = G.mf.search || G.mf.status || G.mf.priority;
   el.innerHTML = (hasFilter
-    ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${G._myTasks.length} tasks</div>`
-    : '') + taskTable(filtered, false);
+    ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${base.length} tasks</div>`
+    : '') + taskTable(filtered, G._myTaskTab === 'assignedby');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
@@ -767,13 +770,27 @@ async function renderMyTasks() {
 
 function drawMyPage() {
   const main    = document.getElementById('main');
-  const od      = G._myTasks.filter(isOverdue).length;
-  const pending = G._myTasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
+  if (!G._myTaskTab) G._myTaskTab = 'all';
+
+  const myOwn      = G._myTasks.filter(t => t.assignee_id === G.me.id);
+  const assignedBy = G._myTasks.filter(t => t.created_by === G.me.id && t.assignee_id !== G.me.id);
+  const od         = myOwn.filter(isOverdue).length;
+  const pending    = myOwn.filter(t => !['completed', 'cancelled'].includes(t.status)).length;
+
+  const tab = (val, label, count) =>
+    `<button class="comp-tab${G._myTaskTab === val ? ' active' : ''}"
+      onclick="G._myTaskTab='${val}';drawMyPage()">${label}
+      <span style="margin-left:5px;font-size:11px;opacity:0.7">(${count})</span>
+    </button>`;
 
   main.innerHTML = `
   <div class="pagehead">
     <div><h1>My tasks</h1>
     <div class="sub">${pending} pending · ${od} overdue</div></div>
+  </div>
+  <div class="comp-tabs" style="margin-bottom:12px">
+    ${tab('all',        'All my tasks',    G._myTasks.length)}
+    ${tab('assignedby', 'Assigned by me',  assignedBy.length)}
   </div>
   ${myFilterBarHtml()}
   <div id="my-table"></div>`;
