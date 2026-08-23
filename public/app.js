@@ -1242,7 +1242,7 @@ async function renderDetail(id) {
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
     api('GET', `/attachments/task/${id}`),
-    api('GET', '/users'),
+    isAdmin ? api('GET', '/users') : api('GET', '/users/active'),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }

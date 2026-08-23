@@ -6,6 +6,19 @@ const auth   = require('../middleware/auth');
 const adminOnly = (req, res, next) =>
   req.user.role === 'admin' ? next() : res.status(403).json({ error: 'Admin access required' });
 
+// Active users list for collaborator picker (any authenticated user)
+router.get('/active', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, name FROM users WHERE active = true ORDER BY name`
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // List all users
 router.get('/', auth, adminOnly, async (req, res) => {
   try {
