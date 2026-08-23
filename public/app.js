@@ -53,7 +53,10 @@ function isOverdue(t) {
 
 function taskPct(t) {
   const o = t.objectives || [];
-  return o.length ? Math.round(100 * o.filter(x => x.done).length / o.length) : 0;
+  if (o.length) return Math.round(100 * o.filter(x => x.done).length / o.length);
+  if (t.status === 'completed') return 100;
+  if (t.status === 'in_progress') return 50;
+  return 0;
 }
 
 function initials(name) {
@@ -1090,8 +1093,8 @@ async function renderAssign() {
         </div>
       </div>
       <div class="fld">
-        <label>Objectives — one per line (optional)</label>
-        <textarea id="a-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed"></textarea>
+        <label>Objectives — one per line <span style="color:var(--red)">*</span></label>
+        <textarea id="a-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed" required></textarea>
       </div>
       <div class="fld">
         <label>Attach file (optional)</label>
@@ -1122,6 +1125,11 @@ async function submitAssign(e) {
   btn.disabled = true;
   const objsRaw = document.getElementById('a-objs').value.trim();
   const objectives = objsRaw ? objsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  if (!objectives.length) {
+    toast('Please add at least one objective before assigning the task.', 'error');
+    btn.disabled = false;
+    return;
+  }
   try {
     const task = await api('POST', '/tasks', {
       title:       document.getElementById('a-title').value.trim(),
@@ -1216,8 +1224,8 @@ async function renderEmpAssign() {
         </div>
       </div>
       <div class="fld">
-        <label>Objectives — one per line (optional)</label>
-        <textarea id="ea-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed"></textarea>
+        <label>Objectives — one per line <span style="color:var(--red)">*</span></label>
+        <textarea id="ea-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed" required></textarea>
       </div>
       <div class="fld">
         <label>Attach file (optional)</label>
@@ -1251,6 +1259,11 @@ async function submitEmpAssign(e) {
   btn.disabled = true;
   const objsRaw = document.getElementById('ea-objs').value.trim();
   const objectives = objsRaw ? objsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  if (!objectives.length) {
+    toast('Please add at least one objective before assigning the task.', 'error');
+    btn.disabled = false;
+    return;
+  }
   try {
     const task = await api('POST', '/tasks', {
       title:       document.getElementById('ea-title').value.trim(),
