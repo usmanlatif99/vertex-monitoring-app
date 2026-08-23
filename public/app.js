@@ -1242,7 +1242,7 @@ async function renderDetail(id) {
     api('GET', `/logs?task_id=${id}`),
     api('GET', `/comments?task_id=${id}`),
     api('GET', `/attachments/task/${id}`),
-    isAdmin ? api('GET', '/users') : Promise.resolve([]),
+    api('GET', '/users'),
   ]);
 
   if (!task) { main.innerHTML = '<div class="error-msg">Task not found</div>'; return; }
@@ -1908,12 +1908,14 @@ function startCommentPolling(taskId) {
 }
 
 function buildTeamPanel(task, me) {
-  const canManage  = me.role === 'admin' || task.assignee_id === me.id;
-  const allUsers   = G._detailUsers || [];
-  const available  = allUsers.filter(u =>
+  const canManage    = me.role === 'admin' || task.assignee_id === me.id;
+  const collabCount  = (task.collaborators || []).length;
+  const atLimit      = me.role !== 'admin' && collabCount >= 3;
+  const allUsers     = G._detailUsers || [];
+  const available    = allUsers.filter(u =>
     u.id !== task.assignee_id && !(task.collaborators || []).some(c => c.id === u.id)
   );
-  const collabSel = canManage && available.length
+  const collabSel = canManage && available.length && !atLimit
     ? `<div style="display:flex;gap:8px;margin-top:8px">
         <select id="collab-sel" style="flex:1;margin:0">
           <option value="">Add collaborator…</option>
@@ -1921,7 +1923,9 @@ function buildTeamPanel(task, me) {
         </select>
         <button class="btn btn-sm" onclick="addCollaborator(${task.id})">Add</button>
        </div>`
-    : '';
+    : (canManage && atLimit
+        ? `<div class="small" style="margin-top:8px;color:var(--ink-soft)">Maximum 3 collaborators reached.</div>`
+        : '');
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0"
          id="team-assignee-name" data-assignee-id="${task.assignee_id}">
