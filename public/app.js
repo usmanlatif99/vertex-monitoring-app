@@ -1252,7 +1252,7 @@ async function renderDetail(id) {
   const isCollaborator = (task.collaborators || []).some(c => c.id === G.me.id);
   const canAct         = isAdmin || task.assignee_id === G.me.id || isCollaborator;
   const canManageCollabs = isAdmin || task.assignee_id === G.me.id;
-  const companyUsers   = (allUsers || []).filter(u => u.active);
+  const companyUsers   = (allUsers || []).filter(u => u.active !== false);
   G._detailUsers       = companyUsers;
 
   main.innerHTML = `
