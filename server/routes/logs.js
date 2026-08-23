@@ -16,7 +16,7 @@ const LOG_SELECT = `
 
 // Get logs
 router.get('/', auth, async (req, res) => {
-  const { user_id, date, task_id } = req.query;
+  const { user_id, date, task_id, from, to } = req.query;
   const isAdmin = req.user.role === 'admin';
 
   const conds  = [];
@@ -33,6 +33,16 @@ router.get('/', auth, async (req, res) => {
   if (date) {
     params.push(date);
     conds.push(`l.log_date = $${params.length}`);
+  }
+
+  if (from) {
+    params.push(from);
+    conds.push(`l.log_date >= $${params.length}`);
+  }
+
+  if (to) {
+    params.push(to);
+    conds.push(`l.log_date <= $${params.length}`);
   }
 
   if (task_id) {

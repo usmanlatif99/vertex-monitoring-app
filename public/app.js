@@ -782,7 +782,30 @@ function drawMyPage() {
 // ── HISTORY ───────────────────────────────────────────────────────────────────
 async function renderHistory() {
   const main = document.getElementById('main');
-  const logs = await api('GET', '/logs') || [];
+
+  // Default filter: this month
+  if (!G._histPreset) G._histPreset = 'month';
+  const today = TODAY();
+  let from, to;
+  if (G._histPreset === 'week') {
+    const d = new Date(today);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    from = d.toISOString().slice(0, 10);
+    to   = today;
+  } else if (G._histPreset === 'month') {
+    from = today.slice(0, 7) + '-01';
+    to   = today;
+  } else {
+    from = G._histFrom || today.slice(0, 7) + '-01';
+    to   = G._histTo   || today;
+  }
+
+  const qs   = `?from=${from}&to=${to}`;
+  const logs = await api('GET', `/logs${qs}`) || [];
+
+  const totalHours = logs.reduce((sum, l) => sum + (parseFloat(l.hours) || 0), 0);
+  const totalDays  = new Set(logs.map(l => l.log_date.slice(0, 10))).size;
 
   const byDate = {};
   logs.forEach(l => {
@@ -791,13 +814,56 @@ async function renderHistory() {
   });
   const dates = Object.keys(byDate).sort().reverse();
 
+  const presetBtn = (val, label) =>
+    `<button class="btn btn-sm ${G._histPreset === val ? 'btn-amber' : 'btn-ghost'}"
+      onclick="G._histPreset='${val}';renderView()">${label}</button>`;
+
   main.innerHTML = `
   <div class="pagehead"><div><h1>My history</h1><div class="sub">Past daily logs</div></div></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:${G._histPreset === 'custom' ? '12px' : '0'}">
+      ${presetBtn('week', 'This week')}
+      ${presetBtn('month', 'This month')}
+      ${presetBtn('custom', 'Custom range')}
+    </div>
+    ${G._histPreset === 'custom' ? `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="small">From</span>
+        <input type="date" value="${from}" max="${today}"
+          onchange="G._histFrom=this.value;renderView()"
+          style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:var(--surface);color:var(--ink)">
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="small">To</span>
+        <input type="date" value="${to}" max="${today}"
+          onchange="G._histTo=this.value;renderView()"
+          style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:var(--surface);color:var(--ink)">
+      </div>
+    </div>` : ''}
+  </div>
+
+  <div class="kpis" style="margin-bottom:16px">
+    <div class="kpi">
+      <div class="n">${totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}</div>
+      <div class="l">Hours logged</div>
+    </div>
+    <div class="kpi">
+      <div class="n">${logs.length}</div>
+      <div class="l">Log entries</div>
+    </div>
+    <div class="kpi">
+      <div class="n">${totalDays}</div>
+      <div class="l">Days worked</div>
+    </div>
+  </div>
+
   ${dates.map(d => `
     <div class="card" style="margin-bottom:14px">
       <h2 style="margin-bottom:10px">${fmtLong(d)}</h2>
       ${byDate[d].map(logRow).join('')}
-    </div>`).join('') || '<div class="empty">No history yet — start logging your work today.</div>'}`;
+    </div>`).join('') || '<div class="empty">No log entries found for this period.</div>'}`;
 }
 
 // ── DASHBOARD (admin) ─────────────────────────────────────────────────────────
