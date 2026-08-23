@@ -1944,7 +1944,7 @@ function buildTeamPanel(task, me) {
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11px;font-weight:600;color:var(--accent)">Collaborator</span>
-          ${canManage ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:11px" onclick="removeCollaborator(${task.id},${c.id})">✕</button>` : ''}
+          ${canManage ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);padding:2px 6px;font-size:13px;line-height:1" title="Remove collaborator" onclick="removeCollaborator(${task.id},${c.id})">🗑</button>` : ''}
         </div>
       </div>`).join('')}
     ${!(task.collaborators || []).length ? '<div class="muted small" style="padding:2px 0 6px">No collaborators yet</div>' : ''}
