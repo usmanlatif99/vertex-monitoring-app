@@ -211,7 +211,7 @@ function updateMyTable() {
   const hasFilter = G.mf.search || G.mf.status || G.mf.priority;
   el.innerHTML = (hasFilter
     ? `<div class="muted small" style="margin-bottom:10px">${filtered.length} of ${base.length} tasks</div>`
-    : '') + taskTable(filtered, G._myTaskTab === 'assignedby');
+    : '') + taskTable(filtered, G._myTaskTab === 'assignedby', true);
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────────
@@ -272,14 +272,15 @@ function dashTaskList(tasks) {
 }
 
 // ── Task table ─────────────────────────────────────────────────────────────────
-function taskTable(tasks, showWho) {
+function taskTable(tasks, showWho, showAssignee) {
   if (!tasks.length) return '<div class="empty">No tasks found</div>';
   const allChecked = tasks.length > 0 && tasks.every(t => G._selectedIds.has(t.id));
+  const showAssigneeCol = showWho || showAssignee;
   return `<div class="table-wrap"><table>
     <thead><tr>
       ${showWho ? `<th style="width:36px;text-align:center"><input type="checkbox" ${allChecked ? 'checked' : ''} title="Select all" onchange="toggleAllCheck(this.checked)"></th>` : ''}
       <th>Task ID</th><th>Task</th>
-      ${showWho ? '<th>Assigned to</th>' : ''}
+      ${showAssigneeCol ? '<th>Assigned to</th>' : ''}
       <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
     </tr></thead>
     <tbody>
@@ -290,10 +291,10 @@ function taskTable(tasks, showWho) {
       </td>` : ''}
       <td>${codeChip(t)}</td>
       <td class="task-title">
-        ${esc(t.title)}${!showWho && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}
+        ${esc(t.title)}${!showAssigneeCol && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}
         ${t.created_by_role === 'employee' && t.created_by_name ? `<br><span class="small muted" style="font-weight:400">Assigned by ${esc(t.created_by_name)}</span>` : ''}
       </td>
-      ${showWho ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
+      ${showAssigneeCol ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
         <span class="small muted">${esc(t.assignee_dept || '')}</span>
         ${(t.collaborators || []).length ? collabAvatarStack(t.collaborators) : ''}</td>` : ''}
       <td>${prPill(t)}</td>
