@@ -1087,7 +1087,7 @@ async function renderEmpAssign() {
         </div>
         <div class="fld">
           <label>Assign to</label>
-          <select id="ea-emp">${empOpts(window._empAssignUsers[myCompany] || window._empAssignUsers.VTX)}</select>
+          <select id="ea-emp" onchange="toggleEmpCollabCheckbox()">${empOpts(window._empAssignUsers[myCompany] || window._empAssignUsers.VTX)}</select>
         </div>
       </div>
       <div class="row">
@@ -1120,6 +1120,12 @@ async function renderEmpAssign() {
           <span class="muted small">PDF, Word, Excel, images · max 20 MB</span>
         </div>
       </div>
+      <div id="ea-collab-wrap" style="display:none;margin-bottom:16px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+          <input type="checkbox" id="ea-add-self" style="width:16px;height:16px;cursor:pointer">
+          Add myself as collaborator <span class="muted small">(task will appear in your My Tasks)</span>
+        </label>
+      </div>
       <button type="submit" class="btn btn-amber">Assign task</button>
       <button type="button" class="btn btn-ghost" style="margin-left:8px" onclick="go('mytasks')">Cancel</button>
     </form>
@@ -1133,6 +1139,14 @@ function refreshEmpAssigneeList(comp) {
   document.getElementById('ea-emp').innerHTML =
     (me ? `<option value="${me.id}">Myself (${esc(me.name)})</option>` : '') +
     others.map(u => `<option value="${u.id}">${esc(u.name)}${u.department ? ' — ' + esc(u.department) : ''}</option>`).join('');
+  toggleEmpCollabCheckbox();
+}
+
+function toggleEmpCollabCheckbox() {
+  const sel  = document.getElementById('ea-emp');
+  const wrap = document.getElementById('ea-collab-wrap');
+  if (!sel || !wrap) return;
+  wrap.style.display = +sel.value === G.me.id ? 'none' : 'block';
 }
 
 async function submitEmpAssign(e) {
@@ -1160,6 +1174,10 @@ async function submitEmpAssign(e) {
           method: 'POST', headers: { 'Authorization': `Bearer ${G.token}` }, body: fd,
         });
       } catch (_) {}
+    }
+    const addSelf = document.getElementById('ea-add-self')?.checked;
+    if (addSelf && task?.id) {
+      try { await api('POST', `/tasks/${task.id}/collaborators`, { user_id: G.me.id }); } catch (_) {}
     }
     toast(`${task.code} created successfully`, 'success');
     go('mytasks');
