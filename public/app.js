@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const G = {
@@ -230,8 +230,11 @@ const ST_LABEL = {
 };
 
 function codeChip(t) {
-  const empCreated = t.created_by_role === 'employee';
-  return `<span class="code ${empCreated ? 'emp-task' : (t.company || '').toLowerCase()}">${esc(t.code)}</span>`;
+  if (t.created_by_role === 'employee') {
+    const cls = t.created_by === t.assignee_id ? 'emp-self-task' : 'emp-task';
+    return `<span class="code ${cls}">${esc(t.code)}</span>`;
+  }
+  return `<span class="code ${(t.company || '').toLowerCase()}">${esc(t.code)}</span>`;
 }
 function prPill(t) {
   const p = t.priority || 'low';
@@ -284,7 +287,7 @@ function taskTable(tasks, showWho, showAssignee) {
       <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
     </tr></thead>
     <tbody>
-    ${tasks.map(t => `<tr class="click${t.created_by_role === 'employee' ? ' emp-task-row' : ''}" onclick="openTask(${t.id})">
+    ${tasks.map(t => { const _rc = t.created_by_role === 'employee' ? (t.created_by === t.assignee_id ? ' emp-self-task-row' : ' emp-task-row') : ''; return `<tr class="click${_rc}" onclick="openTask(${t.id})">
       ${showWho ? `<td style="text-align:center" onclick="event.stopPropagation()">
         <input type="checkbox" class="task-chk" value="${t.id}" ${G._selectedIds.has(t.id) ? 'checked' : ''}
           onchange="toggleTaskCheck(${t.id}, this.checked)">
@@ -301,7 +304,7 @@ function taskTable(tasks, showWho, showAssignee) {
       <td>${stPill(t)}</td>
       <td>${duePill(t)}</td>
       <td><div style="display:flex;align-items:center;gap:7px"><div class="progress" style="flex:1"><i style="width:${taskPct(t)}%;background:${progressColor(t)}"></i></div><span style="font-size:12px;font-weight:600;color:var(--ink);min-width:32px;text-align:right">${taskPct(t)}%</span></div></td>
-    </tr>`).join('')}
+    </tr>`; }).join('')}
     </tbody></table></div>`;
 }
 
@@ -1305,7 +1308,7 @@ async function renderUsers() {
           : '<span class="muted small">—</span>'}
       </td>
       <td><button class="btn btn-ghost btn-sm" onclick="showUserForm(${u.id})">Edit</button></td>
-    </tr>`).join('')}
+    </tr>`; }).join('')}
     </tbody></table></div>`;
 }
 
@@ -1768,7 +1771,7 @@ function drawArchivedPage() {
             <td>${stPill(t)}</td>
             <td>${fmt(t.updated_at)}</td>
             <td><button class="btn btn-ghost btn-sm" onclick="restoreTask(${t.id})">Restore</button></td>
-          </tr>`).join('')}
+          </tr>`; }).join('')}
         </tbody>
       </table>
     </div>`;
@@ -2717,7 +2720,7 @@ async function renderAttendance() {
                   r.check_out_type === 'webauthn'      ? '🔐 Biometric' : r.check_out_type
                 ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
-              </tr>`).join('')}
+              </tr>`; }).join('')}
           </tbody>
         </table></div>`}
   </div>`;
@@ -3189,7 +3192,7 @@ async function renderAttAdminDaily() {
                   ${r.record ? 'Edit' : 'Mark'}
                 </button>
               </td>
-            </tr>`).join('')}
+            </tr>`; }).join('')}
         </tbody>
       </table></div>`;
   }
