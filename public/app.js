@@ -289,7 +289,10 @@ function taskTable(tasks, showWho) {
           onchange="toggleTaskCheck(${t.id}, this.checked)">
       </td>` : ''}
       <td>${codeChip(t)}</td>
-      <td class="task-title">${esc(t.title)}${!showWho && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}</td>
+      <td class="task-title">
+        ${esc(t.title)}${!showWho && t.assignee_id !== G.me.id ? ' <span class="collab-badge">Collaborating</span>' : ''}
+        ${t.created_by_role === 'employee' && t.created_by_name ? `<br><span class="small muted" style="font-weight:400">Assigned by ${esc(t.created_by_name)}</span>` : ''}
+      </td>
       ${showWho ? `<td><span style="font-weight:500">${esc(t.assignee_name || '—')}</span><br>
         <span class="small muted">${esc(t.assignee_dept || '')}</span>
         ${(t.collaborators || []).length ? collabAvatarStack(t.collaborators) : ''}</td>` : ''}
