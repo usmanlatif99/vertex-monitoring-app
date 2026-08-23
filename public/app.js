@@ -566,26 +566,34 @@ function updateHeader() {
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
+function navBadge(n) {
+  return n > 0 ? '<span class="nav-badge">' + n + '</span>' : '';
+}
+
 function renderNav() {
+  const teamPending = (G._teamTasks || []).filter(t => !['completed','cancelled'].includes(t.status)).length;
+  const myPending   = (G._myTasks   || []).filter(t => !['completed','cancelled'].includes(t.status)).length;
+
   const adminItems = [
-    ['dashboard', 'Dashboard'], ['team', 'Team tasks'],
-    ['assign', 'Assign task'], ['dailylogs', 'Daily logs'],
-    ['attendance', 'Attendance'], ['users', 'Manage users'],
-    ['archived', 'Archived tasks'], ['myday', 'My day'],
-    ['password', 'Change password'],
+    ['dashboard', 'Dashboard'],
+    ['team',      'Team tasks' + navBadge(teamPending)],
+    ['assign',    'Assign task'], ['dailylogs', 'Daily logs'],
+    ['attendance','Attendance'], ['users', 'Manage users'],
+    ['archived',  'Archived tasks'], ['myday', 'My day'],
+    ['password',  'Change password'],
   ];
+  const empBase = [['myday', 'My day'], ['mytasks', 'My tasks' + navBadge(myPending)],
+    ['empAssign', 'Assign task'], ['history', 'My history']];
   const empItems = G.me.attendance_enabled
-    ? [['myday', 'My day'], ['mytasks', 'My tasks'], ['empAssign', 'Assign task'],
-       ['history', 'My history'], ['attendance', 'Attendance'], ['password', 'Change password']]
-    : [['myday', 'My day'], ['mytasks', 'My tasks'], ['empAssign', 'Assign task'],
-       ['history', 'My history'], ['password', 'Change password']];
+    ? [...empBase, ['attendance', 'Attendance'], ['password', 'Change password']]
+    : [...empBase, ['password', 'Change password']];
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
   document.getElementById('nav').innerHTML =
-    `<div class="navlabel">${label}</div>` +
-    items.map(([v, l]) =>
-      `<button class="${G.view === v ? 'active' : ''}" onclick="go('${v}')">${l}</button>`
-    ).join('');
+    '<div class="navlabel">' + label + '</div>' +
+    items.map(function(item) {
+      return '<button class="' + (G.view === item[0] ? 'active' : '') + '" onclick="go(\'' + item[0] + '\')">' + item[1] + '</button>';
+    }).join('');
 }
 
 function toggleNav() {
@@ -811,6 +819,7 @@ function drawMyPage() {
   ${myFilterBarHtml()}
   <div id="my-table"></div>`;
   updateMyTable();
+  renderNav();
 }
 
 // ── HISTORY ───────────────────────────────────────────────────────────────────
@@ -1024,6 +1033,7 @@ function drawTeamPage() {
   ${teamFilterBarHtml(assignees)}
   <div id="team-table"></div>`;
   updateTeamTable();
+  renderNav();
 }
 
 // ── ASSIGN TASK (admin) ───────────────────────────────────────────────────────
