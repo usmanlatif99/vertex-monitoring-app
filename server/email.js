@@ -75,7 +75,7 @@ module.exports = {
       <table style="width:100%;border-collapse:collapse;margin:14px 0">${rows.join('')}</table>
       ${btn()}
     `);
-    await send(assigneeEmail, `[${task.code}] New task assigned to you`, html);
+    await send(assigneeEmail, `[${task.code}] New task assigned to you: ${task.title}`, html);
   },
 
   async newComment(task, commenterName, commentText, recipientEmails) {
@@ -92,7 +92,7 @@ module.exports = {
       ${btn()}
     `);
     for (const email of recipientEmails) {
-      await send(email, `[${task.code}] ${commenterName} commented`, html);
+      await send(email, `[${task.code}] ${commenterName} commented on: ${task.title}`, html);
     }
   },
 
@@ -116,7 +116,7 @@ module.exports = {
       ${btn()}
     `);
     for (const email of adminEmails) {
-      await send(email, `[${task.code}] Status → ${ST_LABEL[newStatus] || newStatus}`, html);
+      await send(email, `[${task.code}] Status → ${ST_LABEL[newStatus] || newStatus}: ${task.title}`, html);
     }
   },
 
@@ -132,7 +132,7 @@ module.exports = {
       </table>
       ${btn()}
     `);
-    await send(collabEmail, `[${task.code}] You've been added as a collaborator`, html);
+    await send(collabEmail, `[${task.code}] You've been added as a collaborator: ${task.title}`, html);
   },
 
   async passwordReset(user, resetUrl) {
