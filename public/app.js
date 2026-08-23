@@ -1530,9 +1530,9 @@ async function renderDetail(id) {
       ${isAdmin ? `<button class="btn btn-ghost btn-sm" onclick="openEditTask(${task.id})">Edit task</button>` : ''}
       ${task.status !== 'completed'
         ? `<button class="btn btn-amber btn-sm" onclick="setStatus(${task.id},'completed')">Mark completed</button>` : ''}
-      ${task.status !== 'blocked' && task.status !== 'completed'
+      ${isAdmin && task.status !== 'blocked' && task.status !== 'completed'
         ? `<button class="btn btn-ghost btn-sm" onclick="setStatus(${task.id},'blocked')">Mark blocked</button>` : ''}
-      ${task.status === 'blocked'
+      ${isAdmin && task.status === 'blocked'
         ? `<button class="btn btn-ghost btn-sm" onclick="setStatus(${task.id},'in_progress')">Unblock</button>` : ''}
       ${isAdmin ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="archiveTask(${task.id})">Archive</button>` : ''}
     </div>` : ''}
