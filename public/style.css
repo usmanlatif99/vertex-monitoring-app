@@ -466,6 +466,9 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
   font-size:10px; font-weight:700; padding:1px 6px; min-width:17px; margin-left:6px;
   vertical-align:middle; line-height:1.4;
 }
+.nav-badge-warn {
+  background:var(--amber); color:#78350f;
+}
 
 /* Admin daily summary */
 .att-daily-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }

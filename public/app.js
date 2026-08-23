@@ -494,6 +494,12 @@ function initApp() {
   renderNav();
   renderView();
   setupPush();
+  if (G.me.role !== 'admin') {
+    api('GET', '/logs?date=' + TODAY()).then(function(logs) {
+      G._loggedToday = (logs || []).length > 0;
+      renderNav();
+    }).catch(function() {});
+  }
 }
 
 // ── Push notifications ─────────────────────────────────────────────────────────
@@ -585,7 +591,8 @@ function renderNav() {
     ['archived',  'Archived tasks'], ['myday', 'My day'],
     ['password',  'Change password'],
   ];
-  const empBase = [['myday', 'My day'], ['mytasks', 'My tasks' + navBadge(myPending)],
+  const mydayBadge = (G._loggedToday === false) ? '<span class="nav-badge nav-badge-warn">!</span>' : '';
+  const empBase = [['myday', 'My day' + mydayBadge], ['mytasks', 'My tasks' + navBadge(myPending)],
     ['empAssign', 'Assign task'], ['history', 'My history']];
   const empItems = G.me.attendance_enabled
     ? [...empBase, ['attendance', 'Attendance'], ['password', 'Change password']]
@@ -669,6 +676,8 @@ async function renderMyDay() {
     !['completed', 'cancelled'].includes(t.status)
   );
   const logs    = todayLogs || [];
+  G._loggedToday = logs.length > 0;
+  renderNav();
   const opts    = pending.map(t =>
     `<option value="${t.id}">${esc(t.code)} — ${esc(t.title)}</option>`).join('');
 
@@ -780,6 +789,8 @@ async function submitLog(e) {
   try {
     await api('POST', '/logs', { task_id: task_id ? +task_id : null, description, hours, status_after, ad_hoc_title });
     toast('Entry added ✓', 'success');
+    G._loggedToday = true;
+    renderNav();
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');
