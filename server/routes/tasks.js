@@ -149,8 +149,15 @@ router.post('/', auth, async (req, res) => {
     );
     res.status(201).json(rows[0]);
 
-    // Fire-and-forget: notify the assignee (skip if self-assigned)
+    // Auto-add creator as collaborator when assigning to someone else
     if (parseInt(assignee_id) !== req.user.id) {
+      await db.query(
+        `INSERT INTO task_collaborators (task_id, user_id, added_by)
+         VALUES ($1, $2, $2) ON CONFLICT (task_id, user_id) DO NOTHING`,
+        [taskId, req.user.id]
+      ).catch(e => console.error('[collab-auto]', e.message));
+
+      // Notify the assignee
       const { rows: assigneeRows } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
       if (assigneeRows[0]) {
         email.taskAssigned(rows[0], assigneeRows[0].email).catch(e => console.error('[email]', e.message));
