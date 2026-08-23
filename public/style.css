@@ -203,8 +203,8 @@ body.nav-open .nav-backdrop { display: block; }
 .code.all      { color: #444;    background: var(--grey-s);   border-color: var(--line); }
 .code.general  { color: #1a6fa8; background: #daeeff; border-color: #9fd0f0; }
 .code.emp-task { color: #1d6f42; background: #e6f4ea; border-color: #a8d5b5; }
-tr.emp-task-row { background: #f2faf5; }
-tr.emp-task-row:hover { background: #e6f4ea; }
+tr.emp-task-row { background: #d4edda; }
+tr.emp-task-row:hover { background: #c3e6cb; }
 
 .pill           { font-size: 11.5px; font-weight: 600; padding: 2px 9px;
                   border-radius: 99px; white-space: nowrap; }
