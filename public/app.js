@@ -500,6 +500,10 @@ function initApp() {
       G._loggedToday = (logs || []).length > 0;
       renderNav();
     }).catch(function() {});
+    api('GET', '/tasks').then(function(tasks) {
+      G._myTasks = tasks || [];
+      renderNav();
+    }).catch(function() {});
   }
 }
 
