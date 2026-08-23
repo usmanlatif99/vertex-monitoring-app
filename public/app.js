@@ -555,10 +555,10 @@ function renderNav() {
     ['password', 'Change password'],
   ];
   const empItems = G.me.attendance_enabled
-    ? [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
-       ['attendance', 'Attendance'], ['password', 'Change password']]
-    : [['myday', 'My day'], ['mytasks', 'My tasks'], ['history', 'My history'],
-       ['password', 'Change password']];
+    ? [['myday', 'My day'], ['mytasks', 'My tasks'], ['empAssign', 'Assign task'],
+       ['history', 'My history'], ['attendance', 'Attendance'], ['password', 'Change password']]
+    : [['myday', 'My day'], ['mytasks', 'My tasks'], ['empAssign', 'Assign task'],
+       ['history', 'My history'], ['password', 'Change password']];
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
   document.getElementById('nav').innerHTML =
@@ -611,6 +611,7 @@ function renderView() {
     team:      renderTeam,
     assign:    renderAssign,
     users:     renderUsers,
+    empAssign: renderEmpAssign,
     detail:    () => renderDetail(G.detailId),
     editTask:  () => renderEditTask(G.editTaskId),
     password:  renderChangePassword,
@@ -1033,6 +1034,135 @@ async function submitAssign(e) {
     }
     toast(`${task.code} assigned to ${task.assignee_name}`, 'success');
     go('team');
+  } catch (ex) {
+    toast(ex.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+// ── ASSIGN TASK (employee) ────────────────────────────────────────────────────
+async function renderEmpAssign() {
+  const main  = document.getElementById('main');
+  const users = await api('GET', '/users/active') || [];
+  const emps  = users.filter(u => u.role !== 'admin');
+
+  // Group by company; put "Myself" first in the matching company group
+  window._empAssignUsers = {
+    VTX: emps.filter(u => u.company === 'VTX' || u.company === 'ALL'),
+    VSN: emps.filter(u => u.company === 'VSN' || u.company === 'ALL'),
+  };
+
+  const myCompany = G.me.company || 'VTX';
+
+  const empOpts = (list) => {
+    const me = list.find(u => u.id === G.me.id);
+    const others = list.filter(u => u.id !== G.me.id);
+    return (me ? `<option value="${me.id}">Myself (${esc(me.name)})</option>` : '') +
+      others.map(u => `<option value="${u.id}">${esc(u.name)}${u.department ? ' — ' + esc(u.department) : ''}</option>`).join('');
+  };
+
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+  main.innerHTML = `
+  <div class="pagehead">
+    <div><h1>Assign task</h1><div class="sub">Create and assign a task to any employee</div></div>
+  </div>
+  <div class="card" style="max-width:660px">
+    <form id="emp-assign-form" onsubmit="submitEmpAssign(event)">
+      <div class="fld">
+        <label>Task title</label>
+        <input id="ea-title" placeholder="e.g. Dispatch 500 meters to LESCO Warehouse" required>
+      </div>
+      <div class="fld">
+        <label>Description</label>
+        <textarea id="ea-desc" rows="3" placeholder="What exactly needs to be done — PO numbers, references…"></textarea>
+      </div>
+      <div class="row">
+        <div class="fld">
+          <label>Company</label>
+          <select id="ea-comp" onchange="refreshEmpAssigneeList(this.value)">
+            <option value="VTX"${myCompany === 'VTX' ? ' selected' : ''}>Vertex Electronics</option>
+            <option value="VSN"${myCompany === 'VSN' ? ' selected' : ''}>Vision Engineering</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Assign to</label>
+          <select id="ea-emp">${empOpts(window._empAssignUsers[myCompany] || window._empAssignUsers.VTX)}</select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="fld">
+          <label>Priority</label>
+          <select id="ea-pr">
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label>Deadline</label>
+          <input id="ea-due" type="date" value="${tomorrow}" required>
+        </div>
+      </div>
+      <div class="fld">
+        <label>Objectives — one per line (optional)</label>
+        <textarea id="ea-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed"></textarea>
+      </div>
+      <div class="fld">
+        <label>Attach file (optional)</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span id="ea-file-name">Choose file</span>
+            <input type="file" id="ea-file" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp" onchange="updateFileLabel('ea-file','ea-file-name')">
+          </label>
+          <span class="muted small">PDF, Word, Excel, images · max 20 MB</span>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-amber">Assign task</button>
+      <button type="button" class="btn btn-ghost" style="margin-left:8px" onclick="go('mytasks')">Cancel</button>
+    </form>
+  </div>`;
+}
+
+function refreshEmpAssigneeList(comp) {
+  const list = (window._empAssignUsers || {})[comp] || [];
+  const me = list.find(u => u.id === G.me.id);
+  const others = list.filter(u => u.id !== G.me.id);
+  document.getElementById('ea-emp').innerHTML =
+    (me ? `<option value="${me.id}">Myself (${esc(me.name)})</option>` : '') +
+    others.map(u => `<option value="${u.id}">${esc(u.name)}${u.department ? ' — ' + esc(u.department) : ''}</option>`).join('');
+}
+
+async function submitEmpAssign(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  const objsRaw = document.getElementById('ea-objs').value.trim();
+  const objectives = objsRaw ? objsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  try {
+    const task = await api('POST', '/tasks', {
+      title:       document.getElementById('ea-title').value.trim(),
+      description: document.getElementById('ea-desc').value.trim() || null,
+      company:     document.getElementById('ea-comp').value,
+      assignee_id: +document.getElementById('ea-emp').value,
+      priority:    document.getElementById('ea-pr').value,
+      due_date:    document.getElementById('ea-due').value,
+      objectives,
+    });
+    const fileInput = document.getElementById('ea-file');
+    if (fileInput?.files[0] && task?.id) {
+      const fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      try {
+        await fetch(`/api/attachments/task/${task.id}`, {
+          method: 'POST', headers: { 'Authorization': `Bearer ${G.token}` }, body: fd,
+        });
+      } catch (_) {}
+    }
+    toast(`${task.code} created successfully`, 'success');
+    go('mytasks');
   } catch (ex) {
     toast(ex.message, 'error');
     btn.disabled = false;

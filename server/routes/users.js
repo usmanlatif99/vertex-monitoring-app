@@ -6,11 +6,11 @@ const auth   = require('../middleware/auth');
 const adminOnly = (req, res, next) =>
   req.user.role === 'admin' ? next() : res.status(403).json({ error: 'Admin access required' });
 
-// Active users list for collaborator picker (any authenticated user)
+// Active users list for collaborator picker and employee task assignment
 router.get('/active', auth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, name FROM users WHERE active = true ORDER BY name`
+      `SELECT id, name, company, department, role FROM users WHERE active = true ORDER BY name`
     );
     res.json(rows);
   } catch (e) {

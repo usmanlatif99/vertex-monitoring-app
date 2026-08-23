@@ -90,13 +90,22 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// Create task (admin only)
+// Create task (admin or employee)
 router.post('/', auth, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
 
   const { title, description, company, assignee_id, priority, due_date, objectives } = req.body;
   if (!title || !company || !assignee_id) {
     return res.status(400).json({ error: 'title, company, and assignee_id are required' });
+  }
+
+  // Employees may not assign tasks to admins
+  if (req.user.role !== 'admin') {
+    const { rows: assigneeCheck } = await db.query(
+      `SELECT role FROM users WHERE id = $1`, [assignee_id]
+    );
+    if (!assigneeCheck[0] || assigneeCheck[0].role === 'admin') {
+      return res.status(403).json({ error: 'You cannot assign tasks to an admin.' });
+    }
   }
 
   const client = await db.connect();
@@ -139,15 +148,17 @@ router.post('/', auth, async (req, res) => {
     );
     res.status(201).json(rows[0]);
 
-    // Fire-and-forget: notify the assignee
-    const { rows: assigneeRows } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
-    if (assigneeRows[0]) {
-      email.taskAssigned(rows[0], assigneeRows[0].email).catch(e => console.error('[email]', e.message));
+    // Fire-and-forget: notify the assignee (skip if self-assigned)
+    if (parseInt(assignee_id) !== req.user.id) {
+      const { rows: assigneeRows } = await db.query('SELECT email FROM users WHERE id=$1', [assignee_id]);
+      if (assigneeRows[0]) {
+        email.taskAssigned(rows[0], assigneeRows[0].email).catch(e => console.error('[email]', e.message));
+      }
+      push.toUser(assignee_id, {
+        title: 'New task assigned',
+        body:  `${rows[0].code}: ${rows[0].title}`,
+      }).catch(e => console.error('[push]', e.message));
     }
-    push.toUser(assignee_id, {
-      title: 'New task assigned',
-      body:  `${rows[0].code}: ${rows[0].title}`,
-    }).catch(e => console.error('[push]', e.message));
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);
