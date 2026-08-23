@@ -1317,7 +1317,7 @@ async function renderUsers() {
           : '<span class="muted small">—</span>'}
       </td>
       <td><button class="btn btn-ghost btn-sm" onclick="showUserForm(${u.id})">Edit</button></td>
-    </tr>`; }).join('')}
+    </tr>`).join('')}
     </tbody></table></div>`;
 }
 
@@ -1780,7 +1780,7 @@ function drawArchivedPage() {
             <td>${stPill(t)}</td>
             <td>${fmt(t.updated_at)}</td>
             <td><button class="btn btn-ghost btn-sm" onclick="restoreTask(${t.id})">Restore</button></td>
-          </tr>`; }).join('')}
+          </tr>`).join('')}
         </tbody>
       </table>
     </div>`;
@@ -2729,7 +2729,7 @@ async function renderAttendance() {
                   r.check_out_type === 'webauthn'      ? '🔐 Biometric' : r.check_out_type
                 ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
-              </tr>`; }).join('')}
+              </tr>`).join('')}
           </tbody>
         </table></div>`}
   </div>`;
@@ -3201,7 +3201,7 @@ async function renderAttAdminDaily() {
                   ${r.record ? 'Edit' : 'Mark'}
                 </button>
               </td>
-            </tr>`; }).join('')}
+            </tr>`).join('')}
         </tbody>
       </table></div>`;
   }
