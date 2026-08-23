@@ -186,7 +186,7 @@ router.post('/', auth, async (req, res) => {
 // Update task
 router.put('/:id', auth, async (req, res) => {
   const isAdmin = req.user.role === 'admin';
-  const { title, description, priority, due_date, status, assignee_id } = req.body;
+  const { title, description, priority, due_date, status, assignee_id, manual_progress } = req.body;
 
   try {
     const { rows: cur } = await db.query(
@@ -202,20 +202,27 @@ router.put('/:id', auth, async (req, res) => {
       if (cur[0].assignee_id !== req.user.id && !cur[0].is_collaborator) {
         return res.status(403).json({ error: 'Access denied' });
       }
-      if (status) await db.query(
-        'UPDATE tasks SET status=$1, updated_at=NOW() WHERE id=$2', [status, req.params.id]
-      );
+      const empCols = [], empVals = [];
+      const empAdd = (col, val) => { empVals.push(val); empCols.push(`${col}=$${empVals.length}`); };
+      if (status) empAdd('status', status);
+      if (manual_progress !== undefined) empAdd('manual_progress', manual_progress);
+      if (empCols.length) {
+        empCols.push('updated_at=NOW()');
+        empVals.push(req.params.id);
+        await db.query(`UPDATE tasks SET ${empCols.join(',')} WHERE id=$${empVals.length}`, empVals);
+      }
     } else {
       const cols = [];
       const vals = [];
       const add  = (col, val) => { vals.push(val); cols.push(`${col}=$${vals.length}`); };
 
-      if (title)                   add('title',       title.trim());
-      if (description !== undefined) add('description', description?.trim() || null);
-      if (priority)                add('priority',    priority);
-      if (due_date !== undefined)  add('due_date',    due_date || null);
-      if (status)                  add('status',      status);
-      if (assignee_id)             add('assignee_id', assignee_id);
+      if (title)                        add('title',            title.trim());
+      if (description !== undefined)    add('description',      description?.trim() || null);
+      if (priority)                     add('priority',         priority);
+      if (due_date !== undefined)       add('due_date',         due_date || null);
+      if (status)                       add('status',           status);
+      if (assignee_id)                  add('assignee_id',      assignee_id);
+      if (manual_progress !== undefined) add('manual_progress', manual_progress);
 
       if (!cols.length) return res.status(400).json({ error: 'Nothing to update' });
       cols.push('updated_at=NOW()');

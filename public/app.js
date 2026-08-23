@@ -54,6 +54,7 @@ function isOverdue(t) {
 function taskPct(t) {
   const o = t.objectives || [];
   if (o.length) return Math.round(100 * o.filter(x => x.done).length / o.length);
+  if (t.manual_progress !== null && t.manual_progress !== undefined) return t.manual_progress;
   if (t.status === 'completed') return 100;
   if (t.status === 'in_progress') return 50;
   return 0;
@@ -1104,8 +1105,8 @@ async function renderAssign() {
         </div>
       </div>
       <div class="fld">
-        <label>Objectives — one per line <span style="color:var(--red)">*</span></label>
-        <textarea id="a-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed" required></textarea>
+        <label>Objectives — one per line (optional)</label>
+        <textarea id="a-objs" rows="4" placeholder="e.g.&#10;QC sign-off on batch&#10;Gate pass issued&#10;Transport booked&#10;Delivery confirmed"></textarea>
       </div>
       <div class="fld">
         <label>Attach file (optional)</label>
@@ -1136,11 +1137,6 @@ async function submitAssign(e) {
   btn.disabled = true;
   const objsRaw = document.getElementById('a-objs').value.trim();
   const objectives = objsRaw ? objsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
-  if (!objectives.length) {
-    toast('Please add at least one objective before assigning the task.', 'error');
-    btn.disabled = false;
-    return;
-  }
   try {
     const task = await api('POST', '/tasks', {
       title:       document.getElementById('a-title').value.trim(),
@@ -1270,11 +1266,6 @@ async function submitEmpAssign(e) {
   btn.disabled = true;
   const objsRaw = document.getElementById('ea-objs').value.trim();
   const objectives = objsRaw ? objsRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
-  if (!objectives.length) {
-    toast('Please add at least one objective before assigning the task.', 'error');
-    btn.disabled = false;
-    return;
-  }
   try {
     const task = await api('POST', '/tasks', {
       title:       document.getElementById('ea-title').value.trim(),
@@ -1630,7 +1621,18 @@ async function renderDetail(id) {
               onchange="toggleObj(${task.id}, ${o.id}, this.checked)">
             <span>${esc(o.text)}</span>
           </label>`).join('')
-        : '<div class="empty">No objectives defined</div>'}
+        : (canAct && !['completed','cancelled'].includes(task.status)
+            ? `<div style="margin-top:4px">
+                <div class="small muted" style="margin-bottom:8px">No objectives — set progress manually:</div>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <input type="range" min="0" max="100" step="5" value="${task.manual_progress ?? 0}"
+                    style="flex:1;accent-color:var(--accent)"
+                    oninput="this.nextElementSibling.textContent=this.value+'%'"
+                    onchange="setManualProgress(${task.id}, +this.value)">
+                  <span style="font-size:13px;font-weight:600;min-width:36px">${task.manual_progress ?? 0}%</span>
+                </div>
+              </div>`
+            : '<div class="empty">No objectives defined</div>')}
 
       ${isAdmin && companyUsers.length > 0 ? `
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
@@ -1662,6 +1664,15 @@ async function renderDetail(id) {
 async function toggleObj(taskId, objId, done) {
   try {
     await api('PUT', `/tasks/${taskId}/objectives/${objId}`, { done });
+    renderView();
+  } catch (ex) {
+    toast(ex.message, 'error');
+  }
+}
+
+async function setManualProgress(taskId, value) {
+  try {
+    await api('PUT', `/tasks/${taskId}`, { manual_progress: value });
     renderView();
   } catch (ex) {
     toast(ex.message, 'error');
