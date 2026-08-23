@@ -63,7 +63,14 @@ router.get('/', auth, async (req, res) => {
     const { rows } = await db.query(
       `${TASK_SELECT} ${where}
        ORDER BY
-         CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+         CASE
+           WHEN t.priority = 'critical' AND t.due_date < CURRENT_DATE THEN 0
+           WHEN t.priority = 'high'     AND t.due_date < CURRENT_DATE THEN 1
+           WHEN t.priority = 'critical'                                THEN 2
+           WHEN t.priority = 'high'                                    THEN 3
+           WHEN t.priority = 'medium'                                  THEN 4
+           ELSE 5
+         END,
          t.due_date ASC NULLS LAST,
          t.created_at DESC`,
       params
