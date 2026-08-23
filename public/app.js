@@ -1123,7 +1123,7 @@ async function renderEmpAssign() {
       <div id="ea-collab-wrap" style="display:none;margin-bottom:16px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
           <input type="checkbox" id="ea-add-self" style="width:16px;height:16px;cursor:pointer">
-          Add myself as collaborator <span class="muted small">(task will appear in your My Tasks)</span>
+          <strong style="color:#c0392b">Add myself as collaborator</strong> <span class="muted small">(task will appear in your My Tasks)</span>
         </label>
       </div>
       <button type="submit" class="btn btn-amber">Assign task</button>
