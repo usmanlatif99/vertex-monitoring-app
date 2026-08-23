@@ -227,7 +227,8 @@ const ST_LABEL = {
 };
 
 function codeChip(t) {
-  return `<span class="code ${(t.company || '').toLowerCase()}">${esc(t.code)}</span>`;
+  const empCreated = t.created_by_role === 'employee';
+  return `<span class="code ${empCreated ? 'emp-task' : (t.company || '').toLowerCase()}">${esc(t.code)}</span>`;
 }
 function prPill(t) {
   const p = t.priority || 'low';
@@ -279,7 +280,7 @@ function taskTable(tasks, showWho) {
       <th>Priority</th><th>Status</th><th>Deadline</th><th>Progress</th>
     </tr></thead>
     <tbody>
-    ${tasks.map(t => `<tr class="click" onclick="openTask(${t.id})">
+    ${tasks.map(t => `<tr class="click${t.created_by_role === 'employee' ? ' emp-task-row' : ''}" onclick="openTask(${t.id})">
       ${showWho ? `<td style="text-align:center" onclick="event.stopPropagation()">
         <input type="checkbox" class="task-chk" value="${t.id}" ${G._selectedIds.has(t.id) ? 'checked' : ''}
           onchange="toggleTaskCheck(${t.id}, this.checked)">

@@ -9,6 +9,7 @@ const TASK_SELECT = `
     u.name       AS assignee_name,
     u.department AS assignee_dept,
     cb.name      AS created_by_name,
+    cb.role      AS created_by_role,
     COALESCE(
       (SELECT json_agg(o ORDER BY o.sort_order) FROM objectives o WHERE o.task_id = t.id), '[]'
     ) AS objectives,

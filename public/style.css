@@ -198,10 +198,13 @@ body.nav-open .nav-backdrop { display: block; }
 .code      { font-family: var(--mono); font-size: 12px; font-weight: 600;
              background: var(--grey-s); border: 1px solid var(--line);
              padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
-.code.vtx     { color: #7A4A00; background: var(--amber-s); border-color: #EED9AE; }
-.code.vsn     { color: #0f5a8a; background: var(--accent-s); border-color: #b8daf2; }
-.code.all     { color: #444;    background: var(--grey-s);   border-color: var(--line); }
-.code.general { color: #1a6fa8; background: #daeeff; border-color: #9fd0f0; }
+.code.vtx      { color: #7A4A00; background: var(--amber-s); border-color: #EED9AE; }
+.code.vsn      { color: #0f5a8a; background: var(--accent-s); border-color: #b8daf2; }
+.code.all      { color: #444;    background: var(--grey-s);   border-color: var(--line); }
+.code.general  { color: #1a6fa8; background: #daeeff; border-color: #9fd0f0; }
+.code.emp-task { color: #1d6f42; background: #e6f4ea; border-color: #a8d5b5; }
+tr.emp-task-row { background: #f2faf5; }
+tr.emp-task-row:hover { background: #e6f4ea; }
 
 .pill           { font-size: 11.5px; font-weight: 600; padding: 2px 9px;
                   border-radius: 99px; white-space: nowrap; }
