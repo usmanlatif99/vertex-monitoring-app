@@ -36,7 +36,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', auth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      'SELECT id, name, email, role, company, department, must_change_password, attendance_enabled FROM users WHERE id = $1 AND active = true',
+      'SELECT id, name, email, role, company, department, must_change_password, attendance_enabled, guarantee_access FROM users WHERE id = $1 AND active = true',
       [req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });

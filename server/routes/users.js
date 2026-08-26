@@ -23,10 +23,30 @@ router.get('/active', auth, async (req, res) => {
 router.get('/', auth, adminOnly, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT id, name, email, role, company, department, active, attendance_enabled, created_at
+      `SELECT id, name, email, role, company, department, active, attendance_enabled, guarantee_access, created_at
        FROM users ORDER BY company, name`
     );
     res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Set Bank Guarantee module access
+router.put('/:id/guarantee-access', auth, adminOnly, async (req, res) => {
+  const access = String(req.body.access || 'none');
+  if (!['none','viewer','editor','administrator'].includes(access)) {
+    return res.status(400).json({ error: 'Invalid guarantee access level' });
+  }
+  try {
+    const { rows } = await db.query(
+      `UPDATE users SET guarantee_access=$1 WHERE id=$2
+       RETURNING id, name, guarantee_access`,
+      [access, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0]);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -95,13 +115,18 @@ router.delete('/:id', auth, adminOnly, async (req, res) => {
       `SELECT
          (SELECT COUNT(*) FROM tasks      WHERE assignee_id=$1 OR created_by=$1) AS task_count,
          (SELECT COUNT(*) FROM daily_logs WHERE user_id=$1)                       AS log_count,
-         (SELECT COUNT(*) FROM task_comments WHERE user_id=$1)                   AS comment_count`,
+         (SELECT COUNT(*) FROM task_comments WHERE user_id=$1)                   AS comment_count,
+         ((SELECT COUNT(*) FROM bank_guarantees WHERE created_by=$1 OR updated_by=$1 OR responsible_user_id=$1 OR deleted_by=$1) +
+          (SELECT COUNT(*) FROM guarantee_extensions WHERE created_by=$1) +
+          (SELECT COUNT(*) FROM guarantee_documents WHERE uploaded_by=$1) +
+          (SELECT COUNT(*) FROM guarantee_bank_limits WHERE updated_by=$1) +
+          (SELECT COUNT(*) FROM guarantee_audit_log WHERE changed_by=$1)) AS guarantee_count`,
       [uid]
     );
-    const { task_count, log_count, comment_count } = refs[0];
-    if (+task_count + +log_count + +comment_count > 0) {
+    const { task_count, log_count, comment_count, guarantee_count } = refs[0];
+    if (+task_count + +log_count + +comment_count + +guarantee_count > 0) {
       return res.status(409).json({
-        error: `Cannot delete: this user has ${task_count} task(s), ${log_count} log(s), and ${comment_count} comment(s). Deactivate them instead.`
+        error: `Cannot delete: this user has ${task_count} task(s), ${log_count} log(s), ${comment_count} comment(s), and ${guarantee_count} guarantee reference(s). Deactivate them instead.`
       });
     }
     const { rowCount } = await db.query('DELETE FROM users WHERE id=$1', [uid]);

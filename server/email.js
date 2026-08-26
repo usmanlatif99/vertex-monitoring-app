@@ -177,4 +177,28 @@ module.exports = {
       await send(email, `⚠ ${count} overdue task${count > 1 ? 's' : ''}`, html);
     }
   },
+
+  async guaranteeExpiryDigest(guarantees, recipientEmails) {
+    if (!guarantees.length || !recipientEmails.length) return;
+    const rows = guarantees.map(g => {
+      const remaining = Number(g.remaining_days);
+      const timing = remaining === 0 ? 'Expires today' : remaining === 1 ? '1 day remaining' : `${remaining} days remaining`;
+      return `<tr>
+        <td style="padding:8px 10px;border-bottom:1px solid #dde3ec;font-size:12px;font-weight:600">${g.guarantee_no}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #dde3ec;font-size:12px">${g.beneficiary}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #dde3ec;font-size:12px">${g.issuing_bank}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #dde3ec;font-size:12px;color:#b45309;font-weight:600">${new Date(g.current_expiry_date).toISOString().slice(0,10)}<br>${timing}</td>
+      </tr>`;
+    }).join('');
+    const html = shell(`
+      <h2 style="margin:0 0 6px;color:#1a2332;font-size:17px">Bank Guarantee Expiry Alert</h2>
+      <p style="color:#6b7a90;margin:0 0 14px">${guarantees.length} active guarantee${guarantees.length > 1 ? 's require' : ' requires'} attention within the next two days.</p>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #dde3ec">
+        <thead><tr style="background:#f7f9fc"><th style="padding:8px 10px;text-align:left">Guarantee</th><th style="padding:8px 10px;text-align:left">Beneficiary</th><th style="padding:8px 10px;text-align:left">Bank</th><th style="padding:8px 10px;text-align:left">Expiry</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>${btn()}`);
+    for (const recipient of recipientEmails) {
+      await send(recipient, `⚠ ${guarantees.length} bank guarantee${guarantees.length > 1 ? 's' : ''} expiring soon`, html);
+    }
+  },
 };

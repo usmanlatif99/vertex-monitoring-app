@@ -65,7 +65,6 @@ CREATE TABLE IF NOT EXISTS task_comments (
 -- Columns added after initial deploy
 ALTER TABLE daily_logs       ADD COLUMN IF NOT EXISTS ad_hoc_title VARCHAR(200);
 ALTER TABLE task_comments    ADD COLUMN IF NOT EXISTS parent_id   INTEGER REFERENCES task_comments(id);
-ALTER TABLE task_attachments ADD COLUMN IF NOT EXISTS comment_id  INTEGER REFERENCES task_comments(id) ON DELETE CASCADE;
 ALTER TABLE tasks            ADD COLUMN IF NOT EXISTS archived              BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users            ADD COLUMN IF NOT EXISTS must_change_password  BOOLEAN NOT NULL DEFAULT false;
 
@@ -88,6 +87,8 @@ CREATE TABLE IF NOT EXISTS task_attachments (
   file_size     INTEGER      NOT NULL,
   uploaded_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE task_attachments ADD COLUMN IF NOT EXISTS comment_id INTEGER REFERENCES task_comments(id) ON DELETE CASCADE;
 
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id         SERIAL      PRIMARY KEY,
@@ -185,3 +186,98 @@ CREATE TABLE IF NOT EXISTS task_collaborators (
 );
 CREATE INDEX IF NOT EXISTS idx_collab_task ON task_collaborators(task_id);
 CREATE INDEX IF NOT EXISTS idx_collab_user ON task_collaborators(user_id);
+
+-- Bank Guarantee Register
+ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantee_access VARCHAR(20) NOT NULL DEFAULT 'none';
+
+CREATE TABLE IF NOT EXISTS bank_guarantees (
+  id                   SERIAL PRIMARY KEY,
+  company              VARCHAR(10) NOT NULL,
+  guarantee_no         VARCHAR(120) NOT NULL,
+  issuing_bank         VARCHAR(150) NOT NULL,
+  bank_branch          VARCHAR(200),
+  beneficiary          VARCHAR(250) NOT NULL,
+  guarantee_type       VARCHAR(40) NOT NULL,
+  issue_date           DATE NOT NULL,
+  original_expiry_date DATE NOT NULL,
+  current_expiry_date  DATE NOT NULL,
+  amount               NUMERIC(18,2) NOT NULL CHECK (amount >= 0),
+  cash_margin_percent  NUMERIC(7,3) CHECK (cash_margin_percent IS NULL OR (cash_margin_percent >= 0 AND cash_margin_percent <= 100)),
+  cash_margin_amount   NUMERIC(18,2) CHECK (cash_margin_amount IS NULL OR cash_margin_amount >= 0),
+  reference_no         VARCHAR(300),
+  description          TEXT,
+  lifecycle_status     VARCHAR(20) NOT NULL DEFAULT 'active',
+  returned_date        DATE,
+  responsible_user_id  INTEGER REFERENCES users(id),
+  remarks              TEXT,
+  created_by           INTEGER NOT NULL REFERENCES users(id),
+  updated_by           INTEGER NOT NULL REFERENCES users(id),
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at           TIMESTAMPTZ,
+  deleted_by           INTEGER REFERENCES users(id),
+  UNIQUE (issuing_bank, guarantee_no)
+);
+
+CREATE TABLE IF NOT EXISTS guarantee_extensions (
+  id                   SERIAL PRIMARY KEY,
+  guarantee_id         INTEGER NOT NULL REFERENCES bank_guarantees(id) ON DELETE CASCADE,
+  previous_expiry_date DATE NOT NULL,
+  new_expiry_date      DATE NOT NULL,
+  amendment_no         VARCHAR(150),
+  remarks              TEXT,
+  created_by           INTEGER NOT NULL REFERENCES users(id),
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (new_expiry_date >= previous_expiry_date)
+);
+
+CREATE TABLE IF NOT EXISTS guarantee_documents (
+  id            SERIAL PRIMARY KEY,
+  guarantee_id  INTEGER NOT NULL REFERENCES bank_guarantees(id) ON DELETE CASCADE,
+  document_type VARCHAR(40) NOT NULL DEFAULT 'guarantee',
+  original_name VARCHAR(500) NOT NULL,
+  stored_name   VARCHAR(200) NOT NULL UNIQUE,
+  mime_type     VARCHAR(100) NOT NULL,
+  file_size     INTEGER NOT NULL,
+  uploaded_by   INTEGER NOT NULL REFERENCES users(id),
+  uploaded_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS guarantee_bank_limits (
+  id               SERIAL PRIMARY KEY,
+  company          VARCHAR(10) NOT NULL,
+  issuing_bank     VARCHAR(150) NOT NULL,
+  sanctioned_limit NUMERIC(18,2) NOT NULL CHECK (sanctioned_limit >= 0),
+  notes            TEXT,
+  updated_by       INTEGER NOT NULL REFERENCES users(id),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (company, issuing_bank)
+);
+
+CREATE TABLE IF NOT EXISTS guarantee_alerts (
+  id           SERIAL PRIMARY KEY,
+  guarantee_id INTEGER NOT NULL REFERENCES bank_guarantees(id) ON DELETE CASCADE,
+  alert_date   DATE NOT NULL,
+  alert_type   VARCHAR(30) NOT NULL,
+  recipients   TEXT,
+  sent_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (guarantee_id, alert_date, alert_type)
+);
+
+CREATE TABLE IF NOT EXISTS guarantee_audit_log (
+  id           BIGSERIAL PRIMARY KEY,
+  guarantee_id INTEGER REFERENCES bank_guarantees(id),
+  action       VARCHAR(40) NOT NULL,
+  changed_by   INTEGER NOT NULL REFERENCES users(id),
+  old_data     JSONB,
+  new_data     JSONB,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_guarantees_expiry ON bank_guarantees(current_expiry_date)
+  WHERE deleted_at IS NULL AND lifecycle_status = 'active';
+CREATE INDEX IF NOT EXISTS idx_guarantees_bank ON bank_guarantees(issuing_bank) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guarantees_beneficiary ON bank_guarantees(beneficiary) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guarantee_extensions ON guarantee_extensions(guarantee_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_guarantee_documents ON guarantee_documents(guarantee_id, uploaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_guarantee_audit ON guarantee_audit_log(guarantee_id, created_at DESC);

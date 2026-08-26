@@ -6,6 +6,8 @@ const G = {
   tf: { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false },
   mf: { search: '', status: '', priority: '' },
   _teamTasks: [], _myTasks: [], _archivedTasks: [], _selectedIds: new Set(), _archivedIds: new Set(), _dashFilter: null,
+  gf: { search: '', bank: '', status: '', type: '', company: '' },
+  guaranteeTab: 'register', guaranteeDetailId: null,
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -474,10 +476,12 @@ function initApp() {
   document.getElementById('login').style.display        = 'none';
   document.getElementById('app').style.display          = 'block';
 
-  const adminViews = ['dashboard','team','assign','dailylogs','users','attendance','myday','password','editTask','archived'];
-  const empViews   = G.me.attendance_enabled
+  const adminViews = ['dashboard','team','assign','dailylogs','users','attendance','guarantees','myday','password','editTask','archived'];
+  const guaranteeAllowed = G.me.role === 'admin' || ['viewer','editor','administrator'].includes(G.me.guarantee_access);
+  const empViewsBase = G.me.attendance_enabled
     ? ['myday','mytasks','history','attendance','password']
     : ['myday','mytasks','history','password'];
+  const empViews = guaranteeAllowed ? [...empViewsBase.slice(0,-1), 'guarantees', 'password'] : empViewsBase;
   const validViews = G.me.role === 'admin' ? adminViews : empViews;
   const hash       = location.hash.slice(1);
 
@@ -592,16 +596,19 @@ function renderNav() {
     ['dashboard', 'Dashboard'],
     ['team',      'Team tasks' + navBadge(teamPending)],
     ['assign',    'Assign task'], ['dailylogs', 'Daily logs'],
-    ['attendance','Attendance'], ['users', 'Manage users'],
+    ['attendance','Attendance'], ['guarantees','Bank Guarantees'], ['users', 'Manage users'],
     ['archived',  'Archived tasks'], ['myday', 'My day'],
     ['password',  'Change password'],
   ];
   const mydayBadge = (G._loggedToday === false) ? '<span class="nav-badge nav-badge-warn">!</span>' : '';
   const empBase = [['myday', 'My day' + mydayBadge], ['mytasks', 'My tasks' + navBadge(myPending)],
     ['empAssign', 'Assign task'], ['history', 'My history']];
-  const empItems = G.me.attendance_enabled
+  let empItems = G.me.attendance_enabled
     ? [...empBase, ['attendance', 'Attendance'], ['password', 'Change password']]
     : [...empBase, ['password', 'Change password']];
+  if (['viewer','editor','administrator'].includes(G.me.guarantee_access)) {
+    empItems.splice(empItems.length - 1, 0, ['guarantees', 'Bank Guarantees']);
+  }
   const items = G.me.role === 'admin' ? adminItems : empItems;
   const label = G.me.role === 'admin' ? 'Management' : 'Workspace';
   document.getElementById('nav').innerHTML =
@@ -661,6 +668,7 @@ function renderView() {
     dailylogs:  renderDailyLogs,
     archived:   renderArchived,
     attendance: () => G.me.role === 'admin' ? renderAttendanceAdmin() : renderAttendance(),
+    guarantees: renderGuarantees,
   };
   const fn = views[G.view];
   if (fn) fn().catch(ex => {
@@ -1321,7 +1329,8 @@ async function renderUsers() {
     <thead><tr>
       <th style="width:36px"><input type="checkbox" id="user-sel-all" onclick="usersToggleAll(this)" title="Select all"></th>
       <th>Name</th><th>Email</th><th>Company</th><th>Department</th><th>Role</th><th>Status</th>
-      <th title="Enable / disable attendance marking for this employee">Attendance</th><th></th>
+      <th title="Enable / disable attendance marking for this employee">Attendance</th>
+      <th title="Bank Guarantee module permission">Guarantees</th><th></th>
     </tr></thead>
     <tbody>
     ${users.map(u => `<tr data-uid="${u.id}">
@@ -1344,6 +1353,13 @@ async function renderUsers() {
                <span class="att-toggle-slider"></span>
              </label>`
           : '<span class="muted small">—</span>'}
+      </td>
+      <td>
+        ${u.role === 'admin'
+          ? '<span class="pill s-completed">Administrator</span>'
+          : `<select class="guar-access-select" onchange="guaranteeSetUserAccess(${u.id},this.value)" aria-label="Guarantee access for ${esc(u.name)}">
+              ${['none','viewer','editor','administrator'].map(level => `<option value="${level}" ${(u.guarantee_access || 'none') === level ? 'selected' : ''}>${level === 'none' ? 'No access' : level[0].toUpperCase() + level.slice(1)}</option>`).join('')}
+             </select>`}
       </td>
       <td><button class="btn btn-ghost btn-sm" onclick="showUserForm(${u.id})">Edit</button></td>
     </tr>`).join('')}
@@ -3721,6 +3737,262 @@ function attAdminExport() {
   </head><body>${pages}</body></html>`);
   w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 400);
   w.document.close();
+}
+
+// ── BANK GUARANTEE REGISTER ───────────────────────────────────────────────────
+const GUAR_ACCESS_RANK = { none: 0, viewer: 1, editor: 2, administrator: 3 };
+const GUAR_TYPE_LABEL = {
+  bid: 'Bid Guarantee', performance: 'Performance Guarantee',
+  advance_payment: 'Advance Payment', retention: 'Retention Guarantee',
+  customs: 'Customs Guarantee', other: 'Other',
+};
+
+function guaranteeAccess() {
+  return G.me.role === 'admin' ? 'administrator' : (G.me.guarantee_access || 'none');
+}
+
+function guaranteeCan(level) {
+  return GUAR_ACCESS_RANK[guaranteeAccess()] >= GUAR_ACCESS_RANK[level];
+}
+
+function guarMoney(value) {
+  return `PKR ${Number(value || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`;
+}
+
+function guarStatusLabel(status) {
+  return ({ active:'Active', expiring_soon:'Expiring Soon', expired:'Expired', returned:'Returned',
+    released:'Released', encashed:'Encashed', cancelled:'Cancelled' })[status] || status;
+}
+
+function guarStatusBadge(status) {
+  return `<span class="guar-status guar-${esc(status)}">${esc(guarStatusLabel(status))}</span>`;
+}
+
+async function guaranteeSetUserAccess(userId, access) {
+  try {
+    await api('PUT', `/users/${userId}/guarantee-access`, { access });
+    toast('Bank Guarantee access updated', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+    renderUsers();
+  }
+}
+
+async function renderGuarantees() {
+  if (!guaranteeCan('viewer')) {
+    document.getElementById('main').innerHTML = '<div class="error-msg">You do not have access to the Bank Guarantee Register.</div>';
+    return;
+  }
+  const main = document.getElementById('main');
+  const tab = G.guaranteeTab || 'register';
+  main.innerHTML = `
+    <div class="pagehead">
+      <div><h1>Bank Guarantee Register</h1><div class="sub">Track guarantees, extensions, exposure and expiry alerts across all banks</div></div>
+      <div class="guar-actions">
+        <button class="btn btn-ghost btn-sm" onclick="guaranteeExport()">Export CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="guaranteePrint()">Print PDF</button>
+        ${guaranteeCan('editor') ? '<button class="btn btn-amber" onclick="showGuaranteeForm()">+ Add guarantee</button>' : ''}
+      </div>
+    </div>
+    <div class="guar-tabs">
+      ${[['register','Register'],['alerts','Expiry Alerts'],['limits','Bank Limits'],['history','Extension History']].map(([id,label]) =>
+        `<button class="${tab===id?'active':''}" onclick="guaranteeSwitchTab('${id}')">${label}</button>`).join('')}
+    </div>
+    <div id="guarantee-body"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>`;
+  if (tab === 'register') await renderGuaranteeRegister();
+  else if (tab === 'alerts') await renderGuaranteeAlerts();
+  else if (tab === 'limits') await renderGuaranteeLimits();
+  else await renderGuaranteeHistory();
+}
+
+function guaranteeSwitchTab(tab) {
+  G.guaranteeTab = tab;
+  renderGuarantees();
+}
+
+function guaranteeQuery() {
+  const q = new URLSearchParams();
+  Object.entries(G.gf).forEach(([k,v]) => { if (v) q.set(k, v); });
+  return q.toString();
+}
+
+async function renderGuaranteeRegister() {
+  const body = document.getElementById('guarantee-body');
+  const [summary, rows] = await Promise.all([
+    api('GET', '/guarantees/summary'),
+    api('GET', `/guarantees?${guaranteeQuery()}`),
+  ]);
+  G._guarantees = rows || [];
+  const banks = [...new Set((rows || []).map(r => r.issuing_bank))].sort();
+  body.innerHTML = `
+    <div class="guar-metrics">
+      <div class="guar-metric"><span>Active guarantees</span><strong>${summary.active_count}</strong><small>${guarMoney(summary.active_exposure)} exposure</small></div>
+      <button class="guar-metric guar-metric-alert" onclick="guaranteeSwitchTab('alerts')"><span>Expiring in 2 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
+      <div class="guar-metric guar-metric-danger"><span>Expired, not closed</span><strong>${summary.expired_count}</strong><small>Immediate review</small></div>
+      <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Released guarantees</small></div>
+    </div>
+    <div class="filter-bar guar-filter-bar">
+      <div class="search-wrap">${SEARCH_ICON}<input class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeFilter('search',this.value)"></div>
+      <select onchange="guaranteeFilter('bank',this.value)"><option value="">All banks</option>${banks.map(b=>`<option ${G.gf.bank===b?'selected':''}>${esc(b)}</option>`).join('')}</select>
+      <select onchange="guaranteeFilter('company',this.value)"><option value="">All companies</option><option value="VTX" ${G.gf.company==='VTX'?'selected':''}>Vertex</option><option value="VSN" ${G.gf.company==='VSN'?'selected':''}>Vision</option><option value="ALL" ${G.gf.company==='ALL'?'selected':''}>Both</option></select>
+      <select onchange="guaranteeFilter('status',this.value)"><option value="">All statuses</option>${['active','expiring_soon','expired','returned','released','encashed','cancelled'].map(s=>`<option value="${s}" ${G.gf.status===s?'selected':''}>${guarStatusLabel(s)}</option>`).join('')}</select>
+      <select onchange="guaranteeFilter('type',this.value)"><option value="">All types</option>${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${G.gf.type===v?'selected':''}>${l}</option>`).join('')}</select>
+      <button class="btn btn-ghost btn-sm" onclick="guaranteeClearFilters()">Clear</button>
+    </div>
+    <div class="table-wrap"><table class="guar-table">
+      <thead><tr><th>Guarantee no.</th><th>Company</th><th>Bank</th><th>Beneficiary</th><th>Type</th><th>Expiry</th><th>Days</th><th class="right">Amount</th><th>Status</th></tr></thead>
+      <tbody>${rows.length ? rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.id})">
+        <td><strong>${esc(r.guarantee_no)}</strong>${r.reference_no?`<div class="muted small">${esc(r.reference_no)}</div>`:''}</td>
+        <td><span class="code ${r.company.toLowerCase()}">${r.company}</span></td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td>
+        <td>${esc(GUAR_TYPE_LABEL[r.guarantee_type] || r.guarantee_type)}</td><td>${fmt(r.current_expiry_date)}</td>
+        <td class="guar-days">${r.remaining_days}</td><td class="right">${guarMoney(r.amount)}</td><td>${guarStatusBadge(r.computed_status)}</td>
+      </tr>`).join('') : '<tr><td colspan="9"><div class="empty">No guarantees match these filters.</div></td></tr>'}</tbody>
+    </table></div>`;
+}
+
+function guaranteeFilter(key, value) {
+  G.gf[key] = value;
+  clearTimeout(G._guarFilterTimer);
+  G._guarFilterTimer = setTimeout(renderGuaranteeRegister, key === 'search' ? 300 : 0);
+}
+
+function guaranteeClearFilters() {
+  G.gf = { search:'', bank:'', status:'', type:'', company:'' };
+  renderGuaranteeRegister();
+}
+
+async function renderGuaranteeAlerts() {
+  const body = document.getElementById('guarantee-body');
+  const rows = await api('GET', '/guarantees/alerts') || [];
+  body.innerHTML = rows.length ? `<div class="guar-alert-list">${rows.map(r=>`
+    <button class="guar-alert-row" onclick="showGuaranteeDetail(${r.id})">
+      <div><strong>${esc(r.guarantee_no)}</strong><span>${esc(r.beneficiary)} · ${esc(r.issuing_bank)}</span></div>
+      <div><strong>${r.remaining_days < 0 ? `${Math.abs(r.remaining_days)} day(s) overdue` : r.remaining_days === 0 ? 'Expires today' : `${r.remaining_days} day(s) remaining`}</strong><span>${fmt(r.current_expiry_date)} · ${guarMoney(r.amount)}</span></div>
+    </button>`).join('')}</div>` : '<div class="card"><div class="empty">No active guarantees require expiry attention.</div></div>';
+}
+
+async function renderGuaranteeLimits() {
+  const body = document.getElementById('guarantee-body');
+  const limits = await api('GET', '/guarantees/limits') || [];
+  body.innerHTML = `
+    ${guaranteeCan('administrator') ? `<div class="card guar-limit-form"><h2>Set bank limit</h2><form onsubmit="saveGuaranteeLimit(event)"><div class="row"><div class="fld"><label>Company</label><select id="gl-company"><option value="VTX">Vertex Electronics</option><option value="VSN">Vision Engineering</option><option value="ALL">Both</option></select></div><div class="fld"><label>Issuing bank</label><input id="gl-bank" required></div><div class="fld"><label>Sanctioned limit (PKR)</label><input id="gl-limit" type="number" min="0" step="0.01" required></div></div><button class="btn btn-amber btn-sm">Save limit</button></form></div>` : ''}
+    <div class="guar-limit-grid">${limits.length ? limits.map(l=>{
+      const used=Number(l.used_amount), limit=Number(l.sanctioned_limit), pct=limit?Math.min(100,Math.round(used/limit*100)):0;
+      return `<div class="guar-limit-card"><div class="guar-limit-head"><strong>${esc(l.issuing_bank)}</strong><span class="code ${l.company.toLowerCase()}">${l.company}</span></div><div class="guar-limit-values"><span>Used ${guarMoney(used)}</span><span>${pct}%</span></div><div class="guar-progress"><span style="width:${pct}%"></span></div><div class="guar-limit-foot"><span>Limit ${guarMoney(limit)}</span><strong>Remaining ${guarMoney(l.remaining_amount)}</strong></div></div>`;
+    }).join('') : '<div class="card"><div class="empty">No bank limits configured.</div></div>'}</div>`;
+}
+
+async function saveGuaranteeLimit(e) {
+  e.preventDefault();
+  try {
+    await api('PUT','/guarantees/limits',{company:document.getElementById('gl-company').value,issuing_bank:document.getElementById('gl-bank').value,sanctioned_limit:document.getElementById('gl-limit').value});
+    toast('Bank limit saved','success'); renderGuaranteeLimits();
+  } catch(ex){ toast(ex.message,'error'); }
+}
+
+async function renderGuaranteeHistory() {
+  const body = document.getElementById('guarantee-body');
+  const rows = await api('GET','/guarantees/history') || [];
+  body.innerHTML = `<div class="table-wrap"><table class="guar-table"><thead><tr><th>Guarantee</th><th>Bank</th><th>Beneficiary</th><th>Previous expiry</th><th>New expiry</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.guarantee_id})"><td><strong>${esc(r.guarantee_no)}</strong></td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td><td>${fmt(r.previous_expiry_date)}</td><td>${fmt(r.new_expiry_date)}</td><td>${esc(r.amendment_no||'—')}</td><td>${esc(r.created_by_name)}</td></tr>`).join(''):'<tr><td colspan="7"><div class="empty">No extensions recorded.</div></td></tr>'}</tbody></table></div>`;
+}
+
+function guaranteeModal(html, wide=false) {
+  document.getElementById('guarantee-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'guarantee-modal'; modal.className = 'att-modal-overlay';
+  modal.innerHTML = `<div class="att-modal-box ${wide?'guar-modal-wide':''}">${html}</div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{ if(e.target===modal) modal.remove(); });
+  return modal;
+}
+
+function closeGuaranteeModal(){ document.getElementById('guarantee-modal')?.remove(); }
+
+async function showGuaranteeForm(id=null) {
+  if (!guaranteeCan('editor')) return toast('Editor access required','error');
+  const [record, users] = await Promise.all([id?api('GET',`/guarantees/${id}`):Promise.resolve(null),api('GET','/users/active')]);
+  const r=record||{};
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>${id?'Edit guarantee':'Add bank guarantee'}</h2><div class="sub">Required information for expiry tracking and reporting</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
+    <form onsubmit="submitGuarantee(event,${id||'null'})">
+      <div class="guar-form-grid">
+        <div class="fld"><label>Company *</label><select id="gg-company" required><option value="VTX" ${r.company==='VTX'?'selected':''}>Vertex Electronics</option><option value="VSN" ${r.company==='VSN'?'selected':''}>Vision Engineering</option><option value="ALL" ${r.company==='ALL'?'selected':''}>Both</option></select></div>
+        <div class="fld"><label>Guarantee number *</label><input id="gg-no" value="${esc(r.guarantee_no||'')}" required></div>
+        <div class="fld"><label>Issuing bank *</label><input id="gg-bank" value="${esc(r.issuing_bank||'')}" required></div>
+        <div class="fld"><label>Bank branch</label><input id="gg-branch" value="${esc(r.bank_branch||'')}"></div>
+        <div class="fld"><label>Beneficiary *</label><input id="gg-beneficiary" value="${esc(r.beneficiary||'')}" required></div>
+        <div class="fld"><label>Guarantee type *</label><select id="gg-type">${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${r.guarantee_type===v?'selected':''}>${l}</option>`).join('')}</select></div>
+        <div class="fld"><label>Issue date *</label><input id="gg-issue" type="date" value="${r.issue_date?String(r.issue_date).slice(0,10):''}" required></div>
+        <div class="fld"><label>Original expiry *</label><input id="gg-expiry" type="date" value="${r.original_expiry_date?String(r.original_expiry_date).slice(0,10):''}" required></div>
+        <div class="fld"><label>Amount (PKR) *</label><input id="gg-amount" type="number" min="0" step="0.01" value="${r.amount||''}" required></div>
+        <div class="fld"><label>Cash margin (%)</label><input id="gg-margin" type="number" min="0" max="100" step="0.001" value="${r.cash_margin_percent||''}"></div>
+        <div class="fld"><label>Tender / LOI / PO reference</label><input id="gg-reference" value="${esc(r.reference_no||'')}"></div>
+        <div class="fld"><label>Responsible employee</label><select id="gg-owner"><option value="">Not assigned</option>${(users||[]).map(u=>`<option value="${u.id}" ${Number(r.responsible_user_id)===Number(u.id)?'selected':''}>${esc(u.name)}</option>`).join('')}</select></div>
+        <div class="fld guar-wide"><label>Description</label><textarea id="gg-description" rows="2">${esc(r.description||'')}</textarea></div>
+        <div class="fld guar-wide"><label>Remarks</label><textarea id="gg-remarks" rows="2">${esc(r.remarks||'')}</textarea></div>
+        ${!id?'<div class="fld guar-wide"><label>Guarantee document (optional)</label><input id="gg-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp"></div>':''}
+      </div>
+      <div class="guar-form-actions"><button type="button" class="btn btn-ghost" onclick="closeGuaranteeModal()">Cancel</button><button class="btn btn-amber">${id?'Save changes':'Add guarantee'}</button></div>
+    </form>`,true);
+}
+
+async function submitGuarantee(e,id) {
+  e.preventDefault();
+  const payload={company:document.getElementById('gg-company').value,guarantee_no:document.getElementById('gg-no').value,issuing_bank:document.getElementById('gg-bank').value,bank_branch:document.getElementById('gg-branch').value,beneficiary:document.getElementById('gg-beneficiary').value,guarantee_type:document.getElementById('gg-type').value,issue_date:document.getElementById('gg-issue').value,original_expiry_date:document.getElementById('gg-expiry').value,current_expiry_date:id?undefined:document.getElementById('gg-expiry').value,amount:document.getElementById('gg-amount').value,cash_margin_percent:document.getElementById('gg-margin').value,reference_no:document.getElementById('gg-reference').value,responsible_user_id:document.getElementById('gg-owner').value||null,description:document.getElementById('gg-description').value,remarks:document.getElementById('gg-remarks').value,lifecycle_status:id?(G._guaranteeDetail?.lifecycle_status||'active'):'active',returned_date:id?(G._guaranteeDetail?.returned_date||null):null};
+  if(id && G._guaranteeDetail) payload.current_expiry_date=String(G._guaranteeDetail.current_expiry_date).slice(0,10);
+  try{
+    const saved=await api(id?'PUT':'POST',id?`/guarantees/${id}`:'/guarantees',payload);
+    const file=document.getElementById('gg-file')?.files[0];
+    if(file){const fd=new FormData();fd.append('file',file);const response=await fetch(`/api/guarantees/${saved.id}/documents`,{method:'POST',headers:{Authorization:`Bearer ${G.token}`},body:fd});if(!response.ok){const err=await response.json();throw new Error(err.error||'Document upload failed');}}
+    closeGuaranteeModal();toast(id?'Guarantee updated':'Guarantee added','success');renderGuaranteeRegister();
+  }catch(ex){toast(ex.message,'error');}
+}
+
+async function showGuaranteeDetail(id) {
+  const r=await api('GET',`/guarantees/${id}`); G._guaranteeDetail=r;
+  const docs=(r.documents||[]).map(d=>`<div class="guar-doc"><a href="#" onclick="guaranteeDownload(event,${d.id})">${esc(d.original_name)}</a><span>${Math.round(d.file_size/1024)} KB · ${esc(d.uploaded_by_name)}</span>${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="deleteGuaranteeDocument(${d.id},${r.id})">Delete</button>`:''}</div>`).join('')||'<div class="muted small">No documents uploaded.</div>';
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>${esc(r.guarantee_no)}</h2><div class="sub">${esc(r.issuing_bank)} · ${esc(r.beneficiary)}</div></div><div class="guar-actions">${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal();showGuaranteeForm(${r.id})">Edit</button><button class="btn btn-ghost btn-sm" onclick="guaranteeExtend(${r.id})">Extend</button>${r.lifecycle_status==='active'?`<button class="btn btn-ghost btn-sm" onclick="guaranteeClose(${r.id})">Close</button>`:''}`:''}${guaranteeCan('administrator')?`<button class="btn btn-danger btn-sm" onclick="deleteGuarantee(${r.id})">Delete</button>`:''}<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">×</button></div></div>
+    <div class="guar-detail-top">${guarStatusBadge(r.computed_status)}<strong>${guarMoney(r.amount)}</strong><span>${r.remaining_days} day(s)</span></div>
+    <div class="guar-detail-grid">${[['Company',r.company],['Type',GUAR_TYPE_LABEL[r.guarantee_type]],['Issue date',fmt(r.issue_date)],['Original expiry',fmt(r.original_expiry_date)],['Effective expiry',fmt(r.current_expiry_date)],['Reference',r.reference_no||'—'],['Responsible',r.responsible_name||'—'],['Cash margin',r.cash_margin_percent?`${r.cash_margin_percent}%`:'—']].map(([l,v])=>`<div><span>${l}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
+    ${r.description?`<div class="guar-note"><strong>Description</strong><p>${esc(r.description)}</p></div>`:''}${r.remarks?`<div class="guar-note"><strong>Remarks</strong><p>${esc(r.remarks)}</p></div>`:''}
+    <div class="guar-detail-section"><div class="guar-section-head"><h3>Documents</h3>${guaranteeCan('editor')?`<label class="btn btn-ghost btn-sm">Upload<input type="file" hidden onchange="uploadGuaranteeDocument(${r.id},this)"></label>`:''}</div>${docs}</div>
+    <div class="guar-detail-section"><h3>Extension history</h3>${r.extensions?.length?`<div class="table-wrap"><table class="guar-table"><thead><tr><th>Previous</th><th>New</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${r.extensions.map(x=>`<tr><td>${fmt(x.previous_expiry_date)}</td><td>${fmt(x.new_expiry_date)}</td><td>${esc(x.amendment_no||'—')}</td><td>${esc(x.created_by_name)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted small">No extensions recorded.</div>'}</div>
+    <div class="guar-detail-section"><h3>Audit trail</h3><div class="guar-audit">${(r.audit||[]).map(a=>`<div><strong>${esc(a.action)}</strong><span>${esc(a.changed_by_name)} · ${fmtDateTime(a.created_at)}</span></div>`).join('')}</div></div>`,true);
+}
+
+async function guaranteeExtend(id){
+  const r=G._guaranteeDetail?.id===id?G._guaranteeDetail:await api('GET',`/guarantees/${id}`);
+  guaranteeModal(`<div class="guar-modal-head"><h2>Extend ${esc(r.guarantee_no)}</h2><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div><form onsubmit="submitGuaranteeExtension(event,${id})"><div class="fld"><label>Current expiry</label><input value="${String(r.current_expiry_date).slice(0,10)}" disabled></div><div class="fld"><label>New expiry date *</label><input id="ge-date" type="date" min="${String(r.current_expiry_date).slice(0,10)}" required></div><div class="fld"><label>Amendment number</label><input id="ge-amendment"></div><div class="fld"><label>Remarks</label><textarea id="ge-remarks" rows="3"></textarea></div><div class="guar-form-actions"><button class="btn btn-amber">Record extension</button></div></form>`);
+}
+
+async function submitGuaranteeExtension(e,id){e.preventDefault();try{await api('POST',`/guarantees/${id}/extensions`,{new_expiry_date:document.getElementById('ge-date').value,amendment_no:document.getElementById('ge-amendment').value,remarks:document.getElementById('ge-remarks').value});toast('Extension recorded','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}}
+
+async function guaranteeClose(id){
+  const status=prompt('Enter closing status: returned, released, encashed, or cancelled','returned'); if(!status)return;
+  const remarks=prompt('Closing remarks (optional)','')||'';
+  try{await api('POST',`/guarantees/${id}/close`,{status:status.toLowerCase(),returned_date:TODAY(),remarks});toast('Guarantee closed','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}
+}
+
+async function deleteGuarantee(id){if(!confirm('Delete this guarantee from the active register? The audit history will be retained.'))return;try{await api('DELETE',`/guarantees/${id}`);toast('Guarantee deleted','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}}
+
+async function uploadGuaranteeDocument(id,input){const file=input.files[0];if(!file)return;const fd=new FormData();fd.append('file',file);try{const r=await fetch(`/api/guarantees/${id}/documents`,{method:'POST',headers:{Authorization:`Bearer ${G.token}`},body:fd});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');toast('Document uploaded','success');showGuaranteeDetail(id);}catch(ex){toast(ex.message,'error');}}
+
+async function guaranteeDownload(e,id){e.preventDefault();try{const r=await fetch(`/api/guarantees/documents/${id}/download`,{headers:{Authorization:`Bearer ${G.token}`}});if(!r.ok){const d=await r.json();throw new Error(d.error||'Download failed');}const blob=await r.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=r.headers.get('content-disposition')?.match(/filename="?([^";]+)"?/)?.[1]||'guarantee-document';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(ex){toast(ex.message,'error');}}
+
+async function deleteGuaranteeDocument(docId,guaranteeId){if(!confirm('Delete this document?'))return;try{await api('DELETE',`/guarantees/documents/${docId}`);toast('Document deleted','success');showGuaranteeDetail(guaranteeId);}catch(ex){toast(ex.message,'error');}}
+
+function guaranteeExport(){
+  const rows=G._guarantees||[];if(!rows.length)return toast('No guarantee records to export','error');
+  const headers=['Guarantee No','Company','Issuing Bank','Beneficiary','Type','Issue Date','Effective Expiry','Remaining Days','Amount','Status','Reference'];
+  const csv=[headers,...rows.map(r=>[r.guarantee_no,r.company,r.issuing_bank,r.beneficiary,GUAR_TYPE_LABEL[r.guarantee_type]||r.guarantee_type,String(r.issue_date).slice(0,10),String(r.current_expiry_date).slice(0,10),r.remaining_days,r.amount,guarStatusLabel(r.computed_status),r.reference_no||''])].map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`bank-guarantees-${TODAY()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function guaranteePrint(){
+  const rows=G._guarantees||[];if(!rows.length)return toast('No guarantee records to print','error');
+  const w=window.open('','_blank');if(!w)return toast('Please allow pop-ups to print the report','error');
+  const tableRows=rows.map(r=>`<tr><td>${esc(r.guarantee_no)}</td><td>${esc(r.company)}</td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td><td>${esc(GUAR_TYPE_LABEL[r.guarantee_type]||r.guarantee_type)}</td><td>${String(r.current_expiry_date).slice(0,10)}</td><td>${r.remaining_days}</td><td class="money">${Number(r.amount).toLocaleString('en-PK')}</td><td>${esc(guarStatusLabel(r.computed_status))}</td></tr>`).join('');
+  w.document.write(`<!DOCTYPE html><html><head><title>Bank Guarantee Register</title><style>@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#111;font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}header{display:grid;grid-template-columns:35mm 1fr 35mm;align-items:center;border-bottom:2px solid #1089cc;padding-bottom:3mm;margin-bottom:4mm}header img{height:10mm;width:auto;max-width:20mm;object-fit:contain}h1{text-align:center;font-size:15pt;margin:0}.meta{text-align:right;font-size:7pt;color:#555}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #bbc3cd;padding:2mm 1.5mm;vertical-align:top;overflow-wrap:anywhere}th{background:#e8eef5;text-align:left}td.money{text-align:right}thead{display:table-header-group}tr{break-inside:avoid}footer{margin-top:4mm;color:#666;font-size:7pt}</style></head><body><header><img src="${location.origin}/ve-logo.png"><h1>Bank Guarantee Register</h1><div class="meta">Generated<br>${new Date().toLocaleDateString('en-GB')}</div></header><table><thead><tr><th>Guarantee no.</th><th>Company</th><th>Bank</th><th>Beneficiary</th><th>Type</th><th>Expiry</th><th>Days</th><th>Amount (PKR)</th><th>Status</th></tr></thead><tbody>${tableRows}</tbody></table><footer>${rows.length} record(s) · Filters applied from the portal register</footer></body></html>`);
+  w.onload=()=>setTimeout(()=>{w.focus();w.print()},350);w.document.close();
 }
 
 // ── ATTENDANCE — Manage Users toggle (called from renderUsers) ─────────────────

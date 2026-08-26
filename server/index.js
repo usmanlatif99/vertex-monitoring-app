@@ -9,6 +9,7 @@ const bcrypt    = require('bcryptjs');
 const cron      = require('node-cron');
 const db        = require('./db');
 const email     = require('./email');
+const { sendGuaranteeExpiryAlerts } = require('./guaranteeAlerts');
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/attachments',  require('./routes/attachments'));
 app.use('/api/push',         require('./routes/push'));
 app.use('/api/attendance',   require('./routes/attendance'));
 app.use('/api/webauthn',     require('./routes/webauthn'));
+app.use('/api/guarantees',    require('./routes/guarantees'));
 
 // Serve frontend
 const publicDir = path.join(__dirname, '../public');
@@ -89,6 +91,18 @@ cron.schedule('0 3 * * *', async () => {
     await email.overdueDigest(tasks, admins.map(a => a.email));
   } catch (e) {
     console.error('[cron] Overdue digest failed:', e.message);
+  }
+});
+
+// Bank Guarantee expiry alerts — 8:15 AM PKT (03:15 UTC)
+cron.schedule('15 3 * * *', async () => {
+  try {
+    const result = await sendGuaranteeExpiryAlerts();
+    if (result.guarantees) {
+      console.log(`[cron] Guarantee alerts: ${result.guarantees} guarantee(s), ${result.recipients} recipient(s)`);
+    }
+  } catch (e) {
+    console.error('[cron] Guarantee expiry alerts failed:', e.message);
   }
 });
 

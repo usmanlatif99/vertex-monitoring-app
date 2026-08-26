@@ -585,3 +585,87 @@ tr.click:hover   { background: #f0f7fd; cursor: pointer; }
   background: var(--blue-s); color: var(--accent);
   font-size: 11px; font-weight: 600; white-space: nowrap;
 }
+
+/* ── Bank Guarantee Register ──────────────────────────────────────────────── */
+.guar-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.guar-tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:18px; overflow-x:auto; }
+.guar-tabs button { border:0; border-bottom:2px solid transparent; background:transparent; color:var(--ink-soft);
+  padding:9px 12px; font:inherit; font-size:13px; cursor:pointer; white-space:nowrap; }
+.guar-tabs button.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.guar-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+.guar-metric { display:flex; flex-direction:column; align-items:flex-start; min-width:0; padding:15px 16px;
+  background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:10px; text-align:left; }
+button.guar-metric { font:inherit; cursor:pointer; }
+.guar-metric span { color:var(--ink-soft); font-size:12px; }
+.guar-metric strong { font-size:23px; line-height:1.2; margin:5px 0 2px; }
+.guar-metric small { color:var(--ink-soft); font-size:11px; }
+.guar-metric-alert strong { color:#b7791f; }
+.guar-metric-danger strong { color:var(--red); }
+.guar-filter-bar { grid-template-columns:minmax(210px,1.4fr) repeat(4,minmax(125px,.7fr)) auto; }
+.guar-table { width:100%; }
+.guar-table tbody tr { cursor:pointer; }
+.guar-table tbody tr:hover { background:var(--blue-s); }
+.guar-table .right, .right { text-align:right; }
+.guar-days { text-align:center; font-weight:600; font-variant-numeric:tabular-nums; }
+.guar-status { display:inline-flex; align-items:center; padding:3px 8px; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap; }
+.guar-active { background:var(--green-s); color:var(--green); }
+.guar-expiring_soon { background:var(--amber-s); color:#9a6200; }
+.guar-expired, .guar-encashed { background:var(--red-s); color:var(--red); }
+.guar-returned, .guar-released { background:var(--blue-s); color:var(--accent); }
+.guar-cancelled { background:var(--grey-s); color:var(--ink-soft); }
+.guar-alert-list { display:grid; gap:10px; }
+.guar-alert-row { width:100%; display:flex; align-items:center; justify-content:space-between; gap:18px;
+  padding:14px 16px; border:1px solid var(--line); border-left:4px solid var(--amber); border-radius:9px;
+  background:var(--card); color:var(--ink); text-align:left; cursor:pointer; }
+.guar-alert-row > div { display:flex; flex-direction:column; gap:3px; }
+.guar-alert-row > div:last-child { text-align:right; }
+.guar-alert-row span { color:var(--ink-soft); font-size:12px; }
+.guar-limit-form { margin-bottom:16px; }
+.guar-limit-form h2 { margin-bottom:12px; }
+.guar-limit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.guar-limit-card { padding:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
+.guar-limit-head, .guar-limit-values, .guar-limit-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.guar-limit-values { margin:12px 0 5px; color:var(--ink-soft); font-size:12px; }
+.guar-limit-foot { margin-top:7px; font-size:11px; color:var(--ink-soft); }
+.guar-progress { height:7px; background:var(--grey-s); border-radius:5px; overflow:hidden; }
+.guar-progress span { display:block; height:100%; background:var(--accent); }
+.guar-access-select { min-width:112px; font-size:12px; padding:5px 7px; }
+.guar-modal-wide { width:min(900px,calc(100vw - 28px)); max-width:900px; max-height:calc(100vh - 40px); overflow-y:auto; }
+.guar-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.guar-modal-head h2 { margin:0; }
+.guar-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 16px; }
+.guar-form-grid .guar-wide { grid-column:1/-1; }
+.guar-form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+.guar-detail-top { display:flex; align-items:center; gap:16px; padding:12px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.guar-detail-top strong { font-size:18px; }
+.guar-detail-top > span:last-child { color:var(--ink-soft); margin-left:auto; }
+.guar-detail-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; padding:16px 0; }
+.guar-detail-grid > div { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.guar-detail-grid span { color:var(--ink-soft); font-size:11px; }
+.guar-detail-grid strong { font-size:13px; overflow-wrap:anywhere; }
+.guar-note { padding:11px 13px; background:var(--grey-s); border-radius:7px; margin-bottom:10px; }
+.guar-note p { margin:4px 0 0; color:var(--ink-soft); white-space:pre-wrap; }
+.guar-detail-section { margin-top:18px; }
+.guar-detail-section h3 { margin:0 0 9px; font-size:14px; }
+.guar-section-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.guar-doc { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+.guar-doc a { color:var(--accent); overflow-wrap:anywhere; }
+.guar-doc span { color:var(--ink-soft); font-size:11px; }
+.guar-audit { display:grid; gap:6px; }
+.guar-audit > div { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
+.guar-audit span { color:var(--ink-soft); font-size:11px; }
+
+@media (max-width: 980px) {
+  .guar-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .guar-filter-bar { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .guar-filter-bar .search-wrap { grid-column:1/-1; }
+  .guar-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 620px) {
+  .guar-metrics, .guar-limit-grid, .guar-form-grid { grid-template-columns:1fr; }
+  .guar-form-grid .guar-wide { grid-column:auto; }
+  .guar-alert-row { align-items:flex-start; flex-direction:column; }
+  .guar-alert-row > div:last-child { text-align:left; }
+  .guar-detail-grid { grid-template-columns:1fr 1fr; }
+  .guar-doc { grid-template-columns:1fr; }
+}
