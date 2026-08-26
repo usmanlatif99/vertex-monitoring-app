@@ -3548,37 +3548,178 @@ async function attSubmitMark(e, userId, recId, date) {
 
 function attAdminExport() {
   const month = G._attAdminMonth || TODAY().slice(0, 7);
-  const title  = `Attendance Report — ${attMonthLabel(month)}`;
-  const w = window.open('', '_blank');
   const body = document.getElementById('att-admin-body');
+  const monthTables = body ? [...body.querySelectorAll('.att-company-block')] : [];
+
+  // The compact A4 calendar is available from Monthly Report only. Keeping the
+  // export tied to the visible month prevents screen controls or stale data from
+  // being copied into the print document.
+  if (!monthTables.length || !body.querySelector('.att-monthly-table')) {
+    toast('Open Monthly Report before exporting the monthly summary.', 'error');
+    return;
+  }
+
+  const title = `Monthly Attendance Summary — ${attMonthLabel(month)}`;
+  const [year, monthNo] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNo, 0).getDate();
+  const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const workingDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+    .filter(d => new Date(year, monthNo - 1, d).getDay() !== 0).length;
+
+  const statusCode = (cell) => {
+    if (cell.classList.contains('att-cal-td-present')) return ['P', 'p'];
+    if (cell.classList.contains('att-cal-td-late'))    return ['L', 'l'];
+    if (cell.classList.contains('att-cal-td-halfday')) return ['H', 'h'];
+    if (cell.classList.contains('att-cal-td-absent'))  return ['A', 'a'];
+    if (cell.classList.contains('att-cal-td-pending')) return ['?', 'q'];
+    if (cell.classList.contains('att-cal-td-off'))     return ['–', 'o'];
+    return ['', 'f'];
+  };
+
+  const groups = [];
+  let totalEmployees = 0;
+  let totalPresent = 0;
+  let totalLate = 0;
+  let totalHalfday = 0;
+  let totalAbsent = 0;
+
+  monthTables.forEach(block => {
+    const table = block.querySelector('.att-monthly-table');
+    if (!table) return;
+    const company = block.querySelector('.att-company-title')?.textContent.trim() || 'All Companies';
+    const employees = [...table.tBodies[0].rows].map(row => {
+      const cells = [...row.cells];
+      const days = cells.slice(5, 5 + daysInMonth).map(statusCode);
+      const halfday = days.filter(([code]) => code === 'H').length;
+      const record = {
+        name: cells[0]?.textContent.trim() || '—',
+        present: Number(cells[2]?.textContent.trim()) || 0,
+        late: Number(cells[3]?.textContent.trim()) || 0,
+        halfday,
+        absent: Number(cells[4]?.textContent.trim()) || 0,
+        days,
+      };
+      totalEmployees++;
+      totalPresent += record.present;
+      totalLate += record.late;
+      totalHalfday += record.halfday;
+      totalAbsent += record.absent;
+      return record;
+    });
+    for (let i = 0; i < employees.length; i += 8) {
+      groups.push({ company, employees: employees.slice(i, i + 8) });
+    }
+  });
+
+  if (!groups.length) {
+    toast('No attendance records are available to export.', 'error');
+    return;
+  }
+
+  const dayHeaders = Array.from({ length: daysInMonth }, (_, i) => {
+    const day = i + 1;
+    const dow = new Date(year, monthNo - 1, day).getDay();
+    return `<th class="day-head${dow === 0 ? ' off-head' : ''}">${day}<small>${dayNames[dow]}</small></th>`;
+  }).join('');
+
+  const pages = groups.map((group, pageIndex) => {
+    const rows = group.employees.map(emp => `
+      <tr>
+        <td class="employee">${esc(emp.name)}</td>
+        <td class="sum">${emp.present}</td>
+        <td class="sum">${emp.late}</td>
+        <td class="sum">${emp.halfday}</td>
+        <td class="sum">${emp.absent}</td>
+        ${emp.days.map(([code, cls]) => `<td class="day ${cls}">${code}</td>`).join('')}
+      </tr>`).join('');
+    return `
+      <section class="report-page">
+        <header class="report-head">
+          <img src="${location.origin}/ve-logo.png" alt="Vertex Electronics">
+          <div class="report-title">
+            <h1>Monthly Attendance Summary</h1>
+            <div>Vertex Electronics &amp; Vision Engineering — ${attMonthLabel(month)}</div>
+          </div>
+          <div class="report-meta"><strong>A4 · Landscape</strong><br>Generated: ${new Date().toLocaleDateString('en-GB')}</div>
+        </header>
+        <div class="summary">
+          <div><span>Employees</span><strong>${totalEmployees}</strong></div>
+          <div><span>Working days</span><strong>${workingDays}</strong></div>
+          <div><span>Present</span><strong>${totalPresent}</strong></div>
+          <div><span>Late</span><strong>${totalLate}</strong></div>
+          <div><span>Half days</span><strong>${totalHalfday}</strong></div>
+        </div>
+        <div class="company-title">${esc(group.company)} — Employees ${pageIndex * 8 + 1}–${pageIndex * 8 + group.employees.length}</div>
+        <table>
+          <colgroup><col class="employee-col"><col class="sum-col" span="4"><col class="day-col" span="${daysInMonth}"></colgroup>
+          <thead>
+            <tr><th class="employee">Employee</th><th>P</th><th>L</th><th>H</th><th>A</th>${dayHeaders}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <footer>
+          <div class="legend"><span class="p">P</span> Present <span class="l">L</span> Late <span class="h">H</span> Half Day <span class="a">A</span> Absent <span class="o">–</span> Weekly Off <span class="q">?</span> Pending</div>
+          <div>Page ${pageIndex + 1} of ${groups.length}</div>
+        </footer>
+      </section>`;
+  }).join('');
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    toast('Please allow pop-ups to export the attendance PDF.', 'error');
+    return;
+  }
   w.document.write(`<!DOCTYPE html><html><head>
     <title>${title}</title>
     <style>
-      body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
-      h1   { font-size: 16px; margin-bottom: 4px; }
-      .sub { font-size: 11px; color: #666; margin-bottom: 14px; }
-      table { border-collapse: collapse; width: 100%; font-size: 11px; }
-      th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; white-space: nowrap; }
-      th { background: #f5f5f5; font-weight: 700; }
-      .att-cal-td-present  { background: #d1fae5; }
-      .att-cal-td-late     { background: #fef3c7; }
-      .att-cal-td-halfday  { background: #ddd6fe; }
-      .att-cal-td-absent   { background: #fee2e2; }
-      .att-cal-td-off      { background: #f0f0f0; color: #999; }
-      .att-cal-td-pending  { background: #e0e7ff; }
-      .att-cal-td-future   { background: #f9fafb; }
-      .att-company-block  { margin-bottom: 24px; }
-      .att-company-title  { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
-      @media print { body { margin: 10mm; } }
+      @page { size: A4 landscape; margin: 7mm; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #111; background: #fff;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .report-page { width: 283mm; min-height: 196mm; display: flex; flex-direction: column; break-after: page; page-break-after: always; }
+      .report-page:last-child { break-after: auto; page-break-after: auto; }
+      .report-head { display: grid; grid-template-columns: 13mm 1fr 34mm; align-items: center;
+        border-bottom: .7mm solid #1089cc; padding-bottom: 2mm; margin-bottom: 2mm; }
+      .report-head img { width: 10mm; height: 10mm; border-radius: 1mm; }
+      .report-title { text-align: center; }
+      h1 { font-size: 13pt; line-height: 1.1; margin: 0; }
+      .report-title div { font-size: 7pt; color: #555; margin-top: 1mm; }
+      .report-meta { text-align: right; font-size: 6.5pt; line-height: 1.4; color: #444; }
+      .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5mm; margin-bottom: 2mm; }
+      .summary > div { border: .25mm solid #cbd2da; background: #f7f9fb; padding: 1.2mm 2mm;
+        display: flex; align-items: center; justify-content: space-between; font-size: 6.5pt; }
+      .summary strong { font-size: 9pt; }
+      .company-title { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; margin: .5mm 0 1.2mm; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.2pt; }
+      col.employee-col { width: 37mm; }
+      col.sum-col { width: 6mm; }
+      th, td { height: 7mm; border: .25mm solid #aeb7c2; padding: .4mm; text-align: center; overflow: hidden; }
+      th { background: #e8eef5; font-weight: 700; }
+      th.employee, td.employee { text-align: left; padding-left: 1.2mm; white-space: nowrap; text-overflow: ellipsis; }
+      th.day-head { line-height: 1.05; }
+      th.day-head small { display: block; margin-top: .7mm; font-size: 5.3pt; font-weight: 400; color: #596273; }
+      .sum { font-weight: 700; }
+      .p { background: #d9f5e4; color: #11643a; font-weight: 700; }
+      .l { background: #fff0bd; color: #8a5600; font-weight: 700; }
+      .h { background: #e6ddff; color: #5f3aa8; font-weight: 700; }
+      .a { background: #ffdede; color: #9d241d; font-weight: 700; }
+      .o, .off-head { background: #eceef1; color: #777; }
+      .q { background: #e0e7ff; color: #3730a3; font-weight: 700; }
+      .f { background: #fafafa; color: #bbb; }
+      footer { margin-top: auto; padding-top: 2mm; display: flex; align-items: center; justify-content: space-between;
+        gap: 4mm; font-size: 6pt; color: #444; }
+      .legend { display: flex; align-items: center; gap: 1.5mm; }
+      .legend span { width: 3.5mm; height: 3.5mm; border: .2mm solid #aaa; display: inline-flex;
+        align-items: center; justify-content: center; margin-left: 2mm; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+      @media screen { body { background: #e8ebef; padding: 8mm; }
+        .report-page { background: #fff; margin: 0 auto 8mm; padding: 7mm; box-shadow: 0 2mm 7mm rgba(0,0,0,.18); }
+      }
     </style>
-  </head><body>
-    <h1>${title}</h1>
-    <div class="sub">Vertex Electronics / Vision Engineering — Generated ${new Date().toLocaleDateString('en-GB')}</div>
-    ${body ? body.innerHTML : ''}
-  </body></html>`);
+  </head><body>${pages}</body></html>`);
+  w.onload = () => setTimeout(() => { w.focus(); w.print(); }, 400);
   w.document.close();
-  w.focus();
-  setTimeout(() => w.print(), 600);
 }
 
 // ── ATTENDANCE — Manage Users toggle (called from renderUsers) ─────────────────
