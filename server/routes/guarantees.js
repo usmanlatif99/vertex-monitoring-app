@@ -89,7 +89,7 @@ function parseGuarantee(body, partial = false) {
   const data = {
     company: cleanText(body.company, 10),
     guarantee_no: cleanText(body.guarantee_no, 120),
-    issuing_bank: cleanText(body.issuing_bank, 150),
+    bank_id: body.bank_id ? Number(body.bank_id) : null,
     bank_branch: cleanText(body.bank_branch, 200),
     beneficiary: cleanText(body.beneficiary, 250),
     guarantee_type: cleanText(body.guarantee_type, 40),
@@ -107,7 +107,7 @@ function parseGuarantee(body, partial = false) {
     remarks: cleanText(body.remarks, 5000),
   };
   if (!partial) {
-    const required = ['company','guarantee_no','issuing_bank','beneficiary','guarantee_type','issue_date','original_expiry_date','current_expiry_date'];
+    const required = ['company','guarantee_no','bank_id','beneficiary','guarantee_type','issue_date','original_expiry_date','current_expiry_date'];
     const missing = required.filter(k => !data[k]);
     if (missing.length || !Number.isFinite(data.amount)) throw new Error(`Required fields missing: ${missing.join(', ') || 'amount'}`);
   }
@@ -124,6 +124,16 @@ function parseGuarantee(body, partial = false) {
   return data;
 }
 
+async function resolveBank(client, bankId, allowInactive = false) {
+  if (!Number.isInteger(Number(bankId)) || Number(bankId) < 1) throw new Error('Select a valid issuing bank');
+  const { rows } = await client.query(
+    `SELECT id, name, active FROM guarantee_banks WHERE id=$1${allowInactive ? '' : ' AND active=true'}`,
+    [bankId]
+  );
+  if (!rows[0]) throw new Error('Selected issuing bank is unavailable');
+  return rows[0];
+}
+
 async function audit(client, guaranteeId, action, userId, oldData, newData) {
   await client.query(
     `INSERT INTO guarantee_audit_log (guarantee_id, action, changed_by, old_data, new_data)
@@ -133,6 +143,65 @@ async function audit(client, guaranteeId, action, userId, oldData, newData) {
 }
 
 router.use(auth);
+
+router.get('/banks', viewAccess, async (req, res) => {
+  try {
+    const includeInactive = req.guaranteeAccess === 'administrator' && req.query.all === '1';
+    const { rows } = await db.query(
+      `SELECT b.id, b.name, b.active, b.created_at,
+              COUNT(g.id) FILTER (WHERE g.deleted_at IS NULL)::int AS guarantee_count
+       FROM guarantee_banks b
+       LEFT JOIN bank_guarantees g ON g.bank_id=b.id
+       ${includeInactive ? '' : 'WHERE b.active=true'}
+       GROUP BY b.id ORDER BY b.active DESC, b.name`
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('[guarantee banks]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/banks', adminAccess, async (req, res) => {
+  const name = cleanText(req.body.name, 150);
+  if (!name) return res.status(400).json({ error: 'Bank name is required' });
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO guarantee_banks (name, created_by) VALUES ($1,$2)
+       RETURNING id, name, active, created_at`, [name, req.user.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'This bank already exists' });
+    console.error('[guarantee bank create]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.put('/banks/:bankId', adminAccess, async (req, res) => {
+  const name = cleanText(req.body.name, 150);
+  if (!name) return res.status(400).json({ error: 'Bank name is required' });
+  const active = req.body.active !== false;
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const oldBank = await resolveBank(client, req.params.bankId, true);
+    const { rows } = await client.query(
+      `UPDATE guarantee_banks SET name=$1, active=$2, updated_at=NOW() WHERE id=$3
+       RETURNING id, name, active, created_at`, [name, active, oldBank.id]
+    );
+    if (oldBank.name !== name) {
+      await client.query('UPDATE bank_guarantees SET issuing_bank=$1 WHERE bank_id=$2', [name, oldBank.id]);
+      await client.query('UPDATE guarantee_bank_limits SET issuing_bank=$1 WHERE bank_id=$2', [name, oldBank.id]);
+    }
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23505') return res.status(409).json({ error: 'This bank name conflicts with an existing bank or record' });
+    res.status(e.message?.includes('bank') ? 400 : 500).json({ error: e.message?.includes('bank') ? e.message : 'Server error' });
+  } finally { client.release(); }
+});
 
 router.get('/summary', viewAccess, async (_req, res) => {
   try {
@@ -207,23 +276,25 @@ router.get('/history', viewAccess, async (_req, res) => {
 
 router.put('/limits', adminAccess, async (req, res) => {
   const company = cleanText(req.body.company, 10);
-  const issuingBank = cleanText(req.body.issuing_bank, 150);
+  const bankId = Number(req.body.bank_id);
   const limit = Number(req.body.sanctioned_limit);
-  if (!COMPANIES.has(company) || !issuingBank || !Number.isFinite(limit) || limit < 0) {
+  if (!COMPANIES.has(company) || !Number.isInteger(bankId) || !Number.isFinite(limit) || limit < 0) {
     return res.status(400).json({ error: 'Valid company, bank and sanctioned limit are required' });
   }
   try {
+    const bank = await resolveBank(db, bankId);
     const { rows } = await db.query(
-      `INSERT INTO guarantee_bank_limits (company, issuing_bank, sanctioned_limit, notes, updated_by)
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO guarantee_bank_limits (company, issuing_bank, bank_id, sanctioned_limit, notes, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (company, issuing_bank) DO UPDATE SET
-         sanctioned_limit=EXCLUDED.sanctioned_limit, notes=EXCLUDED.notes,
+         bank_id=EXCLUDED.bank_id, sanctioned_limit=EXCLUDED.sanctioned_limit, notes=EXCLUDED.notes,
          updated_by=EXCLUDED.updated_by, updated_at=NOW()
        RETURNING *`,
-      [company, issuingBank, limit, cleanText(req.body.notes, 2000), req.user.id]
+      [company, bank.name, bank.id, limit, cleanText(req.body.notes, 2000), req.user.id]
     );
     res.json(rows[0]);
   } catch (e) {
+    if (e.message?.includes('issuing bank')) return res.status(400).json({ error: e.message });
     console.error('[guarantee limit save]', e);
     res.status(500).json({ error: 'Server error' });
   }
@@ -272,15 +343,16 @@ router.post('/', editAccess, async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    const bank = await resolveBank(client, data.bank_id);
     const { rows } = await client.query(
       `INSERT INTO bank_guarantees
-       (company, guarantee_no, issuing_bank, bank_branch, beneficiary, guarantee_type,
+       (company, guarantee_no, issuing_bank, bank_id, bank_branch, beneficiary, guarantee_type,
         issue_date, original_expiry_date, current_expiry_date, amount, cash_margin_percent,
         cash_margin_amount, reference_no, description, lifecycle_status, returned_date,
         responsible_user_id, remarks, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20)
        RETURNING *`,
-      [data.company,data.guarantee_no,data.issuing_bank,data.bank_branch,data.beneficiary,
+      [data.company,data.guarantee_no,bank.name,bank.id,data.bank_branch,data.beneficiary,
        data.guarantee_type,data.issue_date,data.original_expiry_date,data.current_expiry_date,
        data.amount,data.cash_margin_percent,data.cash_margin_amount,data.reference_no,
        data.description,data.lifecycle_status,data.returned_date,data.responsible_user_id,
@@ -291,6 +363,7 @@ router.post('/', editAccess, async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (e) {
     await client.query('ROLLBACK');
+    if (e.message?.includes('issuing bank')) return res.status(400).json({ error: e.message });
     if (e.code === '23505') return res.status(409).json({ error: 'This bank and guarantee number already exist' });
     console.error('[guarantee create]', e);
     res.status(500).json({ error: 'Server error' });
@@ -330,14 +403,15 @@ router.put('/:id', editAccess, async (req, res) => {
     await client.query('BEGIN');
     const old = (await client.query('SELECT * FROM bank_guarantees WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [req.params.id])).rows[0];
     if (!old) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Guarantee not found' }); }
+    const bank = await resolveBank(client, data.bank_id, Number(data.bank_id) === Number(old.bank_id));
     const { rows } = await client.query(
-      `UPDATE bank_guarantees SET company=$1, guarantee_no=$2, issuing_bank=$3, bank_branch=$4,
-       beneficiary=$5, guarantee_type=$6, issue_date=$7, original_expiry_date=$8,
-       current_expiry_date=$9, amount=$10, cash_margin_percent=$11, cash_margin_amount=$12,
-       reference_no=$13, description=$14, lifecycle_status=$15, returned_date=$16,
-       responsible_user_id=$17, remarks=$18, updated_by=$19, updated_at=NOW()
-       WHERE id=$20 RETURNING *`,
-      [data.company,data.guarantee_no,data.issuing_bank,data.bank_branch,data.beneficiary,
+      `UPDATE bank_guarantees SET company=$1, guarantee_no=$2, issuing_bank=$3, bank_id=$4, bank_branch=$5,
+       beneficiary=$6, guarantee_type=$7, issue_date=$8, original_expiry_date=$9,
+       current_expiry_date=$10, amount=$11, cash_margin_percent=$12, cash_margin_amount=$13,
+       reference_no=$14, description=$15, lifecycle_status=$16, returned_date=$17,
+       responsible_user_id=$18, remarks=$19, updated_by=$20, updated_at=NOW()
+       WHERE id=$21 RETURNING *`,
+      [data.company,data.guarantee_no,bank.name,bank.id,data.bank_branch,data.beneficiary,
        data.guarantee_type,data.issue_date,data.original_expiry_date,data.current_expiry_date,
        data.amount,data.cash_margin_percent,data.cash_margin_amount,data.reference_no,
        data.description,data.lifecycle_status,data.returned_date,data.responsible_user_id,
@@ -348,6 +422,7 @@ router.put('/:id', editAccess, async (req, res) => {
     res.json(rows[0]);
   } catch (e) {
     await client.query('ROLLBACK');
+    if (e.message?.includes('issuing bank')) return res.status(400).json({ error: e.message });
     if (e.code === '23505') return res.status(409).json({ error: 'This bank and guarantee number already exist' });
     console.error('[guarantee update]', e);
     res.status(500).json({ error: 'Server error' });

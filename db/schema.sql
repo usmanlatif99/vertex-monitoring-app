@@ -190,6 +190,16 @@ CREATE INDEX IF NOT EXISTS idx_collab_user ON task_collaborators(user_id);
 -- Bank Guarantee Register
 ALTER TABLE users ADD COLUMN IF NOT EXISTS guarantee_access VARCHAR(20) NOT NULL DEFAULT 'none';
 
+CREATE TABLE IF NOT EXISTS guarantee_banks (
+  id         SERIAL PRIMARY KEY,
+  name       VARCHAR(150) NOT NULL UNIQUE,
+  active     BOOLEAN NOT NULL DEFAULT true,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guarantee_banks_name_ci ON guarantee_banks (LOWER(name));
+
 CREATE TABLE IF NOT EXISTS bank_guarantees (
   id                   SERIAL PRIMARY KEY,
   company              VARCHAR(10) NOT NULL,
@@ -254,6 +264,21 @@ CREATE TABLE IF NOT EXISTS guarantee_bank_limits (
   UNIQUE (company, issuing_bank)
 );
 
+-- Link existing text-based records to the controlled bank master without
+-- breaking installations that already contain guarantee data.
+ALTER TABLE bank_guarantees ADD COLUMN IF NOT EXISTS bank_id INTEGER REFERENCES guarantee_banks(id);
+ALTER TABLE guarantee_bank_limits ADD COLUMN IF NOT EXISTS bank_id INTEGER REFERENCES guarantee_banks(id);
+INSERT INTO guarantee_banks (name)
+SELECT DISTINCT issuing_bank FROM bank_guarantees WHERE issuing_bank IS NOT NULL AND TRIM(issuing_bank) <> ''
+ON CONFLICT DO NOTHING;
+INSERT INTO guarantee_banks (name)
+SELECT DISTINCT issuing_bank FROM guarantee_bank_limits WHERE issuing_bank IS NOT NULL AND TRIM(issuing_bank) <> ''
+ON CONFLICT DO NOTHING;
+UPDATE bank_guarantees g SET bank_id=b.id FROM guarantee_banks b
+WHERE g.bank_id IS NULL AND LOWER(g.issuing_bank)=LOWER(b.name);
+UPDATE guarantee_bank_limits l SET bank_id=b.id FROM guarantee_banks b
+WHERE l.bank_id IS NULL AND LOWER(l.issuing_bank)=LOWER(b.name);
+
 CREATE TABLE IF NOT EXISTS guarantee_alerts (
   id           SERIAL PRIMARY KEY,
   guarantee_id INTEGER NOT NULL REFERENCES bank_guarantees(id) ON DELETE CASCADE,
@@ -277,6 +302,7 @@ CREATE TABLE IF NOT EXISTS guarantee_audit_log (
 CREATE INDEX IF NOT EXISTS idx_guarantees_expiry ON bank_guarantees(current_expiry_date)
   WHERE deleted_at IS NULL AND lifecycle_status = 'active';
 CREATE INDEX IF NOT EXISTS idx_guarantees_bank ON bank_guarantees(issuing_bank) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_guarantees_bank_id ON bank_guarantees(bank_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_guarantees_beneficiary ON bank_guarantees(beneficiary) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_guarantee_extensions ON guarantee_extensions(guarantee_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_guarantee_documents ON guarantee_documents(guarantee_id, uploaded_at DESC);

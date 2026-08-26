@@ -3795,14 +3795,16 @@ async function renderGuarantees() {
       </div>
     </div>
     <div class="guar-tabs">
-      ${[['register','Register'],['alerts','Expiry Alerts'],['limits','Bank Limits'],['history','Extension History']].map(([id,label]) =>
+      ${[['register','Register'],['alerts','Expiry Alerts'],['limits','Bank Limits'],['history','Extension History'],...(guaranteeCan('administrator')?[['banks','Manage Banks']]:[])].map(([id,label]) =>
         `<button class="${tab===id?'active':''}" onclick="guaranteeSwitchTab('${id}')">${label}</button>`).join('')}
     </div>
     <div id="guarantee-body"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>`;
   if (tab === 'register') await renderGuaranteeRegister();
   else if (tab === 'alerts') await renderGuaranteeAlerts();
   else if (tab === 'limits') await renderGuaranteeLimits();
-  else await renderGuaranteeHistory();
+  else if (tab === 'history') await renderGuaranteeHistory();
+  else if (tab === 'banks' && guaranteeCan('administrator')) await renderGuaranteeBanks();
+  else { G.guaranteeTab = 'register'; await renderGuaranteeRegister(); }
 }
 
 function guaranteeSwitchTab(tab) {
@@ -3818,12 +3820,12 @@ function guaranteeQuery() {
 
 async function renderGuaranteeRegister() {
   const body = document.getElementById('guarantee-body');
-  const [summary, rows] = await Promise.all([
+  const [summary, rows, banks] = await Promise.all([
     api('GET', '/guarantees/summary'),
     api('GET', `/guarantees?${guaranteeQuery()}`),
+    api('GET', '/guarantees/banks'),
   ]);
   G._guarantees = rows || [];
-  const banks = [...new Set((rows || []).map(r => r.issuing_bank))].sort();
   body.innerHTML = `
     <div class="guar-metrics">
       <div class="guar-metric"><span>Active guarantees</span><strong>${summary.active_count}</strong><small>${guarMoney(summary.active_exposure)} exposure</small></div>
@@ -3833,7 +3835,7 @@ async function renderGuaranteeRegister() {
     </div>
     <div class="filter-bar guar-filter-bar">
       <div class="search-wrap">${SEARCH_ICON}<input class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeFilter('search',this.value)"></div>
-      <select onchange="guaranteeFilter('bank',this.value)"><option value="">All banks</option>${banks.map(b=>`<option ${G.gf.bank===b?'selected':''}>${esc(b)}</option>`).join('')}</select>
+      <select onchange="guaranteeFilter('bank',this.value)"><option value="">All banks</option>${banks.map(b=>`<option value="${esc(b.name)}" ${G.gf.bank===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
       <select onchange="guaranteeFilter('company',this.value)"><option value="">All companies</option><option value="VTX" ${G.gf.company==='VTX'?'selected':''}>Vertex</option><option value="VSN" ${G.gf.company==='VSN'?'selected':''}>Vision</option><option value="ALL" ${G.gf.company==='ALL'?'selected':''}>Both</option></select>
       <select onchange="guaranteeFilter('status',this.value)"><option value="">All statuses</option>${['active','expiring_soon','expired','returned','released','encashed','cancelled'].map(s=>`<option value="${s}" ${G.gf.status===s?'selected':''}>${guarStatusLabel(s)}</option>`).join('')}</select>
       <select onchange="guaranteeFilter('type',this.value)"><option value="">All types</option>${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${G.gf.type===v?'selected':''}>${l}</option>`).join('')}</select>
@@ -3873,9 +3875,9 @@ async function renderGuaranteeAlerts() {
 
 async function renderGuaranteeLimits() {
   const body = document.getElementById('guarantee-body');
-  const limits = await api('GET', '/guarantees/limits') || [];
+  const [limits, banks] = await Promise.all([api('GET', '/guarantees/limits'), api('GET', '/guarantees/banks')]);
   body.innerHTML = `
-    ${guaranteeCan('administrator') ? `<div class="card guar-limit-form"><h2>Set bank limit</h2><form onsubmit="saveGuaranteeLimit(event)"><div class="row"><div class="fld"><label>Company</label><select id="gl-company"><option value="VTX">Vertex Electronics</option><option value="VSN">Vision Engineering</option><option value="ALL">Both</option></select></div><div class="fld"><label>Issuing bank</label><input id="gl-bank" required></div><div class="fld"><label>Sanctioned limit (PKR)</label><input id="gl-limit" type="number" min="0" step="0.01" required></div></div><button class="btn btn-amber btn-sm">Save limit</button></form></div>` : ''}
+    ${guaranteeCan('administrator') ? `<div class="card guar-limit-form"><h2>Set bank limit</h2><form onsubmit="saveGuaranteeLimit(event)"><div class="row"><div class="fld"><label>Company</label><select id="gl-company"><option value="VTX">Vertex Electronics</option><option value="VSN">Vision Engineering</option><option value="ALL">Both</option></select></div><div class="fld"><label>Issuing bank</label><select id="gl-bank" required><option value="">Select bank</option>${(banks||[]).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></div><div class="fld"><label>Sanctioned limit (PKR)</label><input id="gl-limit" type="number" min="0" step="0.01" required></div></div><button class="btn btn-amber btn-sm">Save limit</button></form></div>` : ''}
     <div class="guar-limit-grid">${limits.length ? limits.map(l=>{
       const used=Number(l.used_amount), limit=Number(l.sanctioned_limit), pct=limit?Math.min(100,Math.round(used/limit*100)):0;
       return `<div class="guar-limit-card"><div class="guar-limit-head"><strong>${esc(l.issuing_bank)}</strong><span class="code ${l.company.toLowerCase()}">${l.company}</span></div><div class="guar-limit-values"><span>Used ${guarMoney(used)}</span><span>${pct}%</span></div><div class="guar-progress"><span style="width:${pct}%"></span></div><div class="guar-limit-foot"><span>Limit ${guarMoney(limit)}</span><strong>Remaining ${guarMoney(l.remaining_amount)}</strong></div></div>`;
@@ -3885,9 +3887,35 @@ async function renderGuaranteeLimits() {
 async function saveGuaranteeLimit(e) {
   e.preventDefault();
   try {
-    await api('PUT','/guarantees/limits',{company:document.getElementById('gl-company').value,issuing_bank:document.getElementById('gl-bank').value,sanctioned_limit:document.getElementById('gl-limit').value});
+    await api('PUT','/guarantees/limits',{company:document.getElementById('gl-company').value,bank_id:document.getElementById('gl-bank').value,sanctioned_limit:document.getElementById('gl-limit').value});
     toast('Bank limit saved','success'); renderGuaranteeLimits();
   } catch(ex){ toast(ex.message,'error'); }
+}
+
+async function renderGuaranteeBanks() {
+  const body = document.getElementById('guarantee-body');
+  if (!guaranteeCan('administrator')) return guaranteeSwitchTab('register');
+  const banks = await api('GET', '/guarantees/banks?all=1') || [];
+  body.innerHTML = `
+    <div class="card guar-bank-form"><h2>Add issuing bank</h2><form onsubmit="addGuaranteeBank(event)"><div class="row"><div class="fld"><label>Official bank name</label><input id="gb-name" maxlength="150" placeholder="e.g. Habib Bank Limited" required></div><button class="btn btn-amber btn-sm">Add bank</button></div></form></div>
+    <div class="table-wrap"><table class="guar-table"><thead><tr><th>Official bank name</th><th>Guarantees</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+      ${banks.length ? banks.map(b=>`<tr><td><input class="guar-bank-name" id="gb-name-${b.id}" value="${esc(b.name)}" maxlength="150"></td><td>${b.guarantee_count}</td><td><span class="guar-status ${b.active?'guar-active':'guar-cancelled'}">${b.active?'Active':'Inactive'}</span></td><td><div class="guar-actions"><button class="btn btn-ghost btn-sm" onclick="saveGuaranteeBank(${b.id},${b.active})">Save name</button><button class="btn btn-ghost btn-sm" onclick="saveGuaranteeBank(${b.id},${!b.active})">${b.active?'Deactivate':'Activate'}</button></div></td></tr>`).join('') : '<tr><td colspan="4"><div class="empty">No banks added yet. Add the first approved issuing bank above.</div></td></tr>'}
+    </tbody></table></div>`;
+}
+
+async function addGuaranteeBank(e) {
+  e.preventDefault();
+  try {
+    await api('POST','/guarantees/banks',{name:document.getElementById('gb-name').value});
+    toast('Bank added','success'); renderGuaranteeBanks();
+  } catch(ex) { toast(ex.message,'error'); }
+}
+
+async function saveGuaranteeBank(id, active) {
+  try {
+    await api('PUT',`/guarantees/banks/${id}`,{name:document.getElementById(`gb-name-${id}`).value,active});
+    toast(active?'Bank updated':'Bank deactivated','success'); renderGuaranteeBanks();
+  } catch(ex) { toast(ex.message,'error'); }
 }
 
 async function renderGuaranteeHistory() {
@@ -3910,14 +3938,15 @@ function closeGuaranteeModal(){ document.getElementById('guarantee-modal')?.remo
 
 async function showGuaranteeForm(id=null) {
   if (!guaranteeCan('editor')) return toast('Editor access required','error');
-  const [record, users] = await Promise.all([id?api('GET',`/guarantees/${id}`):Promise.resolve(null),api('GET','/users/active')]);
+  const [record, users, banks] = await Promise.all([id?api('GET',`/guarantees/${id}`):Promise.resolve(null),api('GET','/users/active'),api('GET','/guarantees/banks')]);
   const r=record||{};
+  if (!banks?.length) return toast('An administrator must add an issuing bank under Manage Banks first','error');
   guaranteeModal(`<div class="guar-modal-head"><div><h2>${id?'Edit guarantee':'Add bank guarantee'}</h2><div class="sub">Required information for expiry tracking and reporting</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
     <form onsubmit="submitGuarantee(event,${id||'null'})">
       <div class="guar-form-grid">
         <div class="fld"><label>Company *</label><select id="gg-company" required><option value="VTX" ${r.company==='VTX'?'selected':''}>Vertex Electronics</option><option value="VSN" ${r.company==='VSN'?'selected':''}>Vision Engineering</option><option value="ALL" ${r.company==='ALL'?'selected':''}>Both</option></select></div>
         <div class="fld"><label>Guarantee number *</label><input id="gg-no" value="${esc(r.guarantee_no||'')}" required></div>
-        <div class="fld"><label>Issuing bank *</label><input id="gg-bank" value="${esc(r.issuing_bank||'')}" required></div>
+        <div class="fld"><label>Issuing bank *</label><select id="gg-bank" required><option value="">Select approved bank</option>${banks.map(b=>`<option value="${b.id}" ${Number(r.bank_id)===Number(b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
         <div class="fld"><label>Bank branch</label><input id="gg-branch" value="${esc(r.bank_branch||'')}"></div>
         <div class="fld"><label>Beneficiary *</label><input id="gg-beneficiary" value="${esc(r.beneficiary||'')}" required></div>
         <div class="fld"><label>Guarantee type *</label><select id="gg-type">${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${r.guarantee_type===v?'selected':''}>${l}</option>`).join('')}</select></div>
@@ -3937,7 +3966,7 @@ async function showGuaranteeForm(id=null) {
 
 async function submitGuarantee(e,id) {
   e.preventDefault();
-  const payload={company:document.getElementById('gg-company').value,guarantee_no:document.getElementById('gg-no').value,issuing_bank:document.getElementById('gg-bank').value,bank_branch:document.getElementById('gg-branch').value,beneficiary:document.getElementById('gg-beneficiary').value,guarantee_type:document.getElementById('gg-type').value,issue_date:document.getElementById('gg-issue').value,original_expiry_date:document.getElementById('gg-expiry').value,current_expiry_date:id?undefined:document.getElementById('gg-expiry').value,amount:document.getElementById('gg-amount').value,cash_margin_percent:document.getElementById('gg-margin').value,reference_no:document.getElementById('gg-reference').value,responsible_user_id:document.getElementById('gg-owner').value||null,description:document.getElementById('gg-description').value,remarks:document.getElementById('gg-remarks').value,lifecycle_status:id?(G._guaranteeDetail?.lifecycle_status||'active'):'active',returned_date:id?(G._guaranteeDetail?.returned_date||null):null};
+  const payload={company:document.getElementById('gg-company').value,guarantee_no:document.getElementById('gg-no').value,bank_id:document.getElementById('gg-bank').value,bank_branch:document.getElementById('gg-branch').value,beneficiary:document.getElementById('gg-beneficiary').value,guarantee_type:document.getElementById('gg-type').value,issue_date:document.getElementById('gg-issue').value,original_expiry_date:document.getElementById('gg-expiry').value,current_expiry_date:id?undefined:document.getElementById('gg-expiry').value,amount:document.getElementById('gg-amount').value,cash_margin_percent:document.getElementById('gg-margin').value,reference_no:document.getElementById('gg-reference').value,responsible_user_id:document.getElementById('gg-owner').value||null,description:document.getElementById('gg-description').value,remarks:document.getElementById('gg-remarks').value,lifecycle_status:id?(G._guaranteeDetail?.lifecycle_status||'active'):'active',returned_date:id?(G._guaranteeDetail?.returned_date||null):null};
   if(id && G._guaranteeDetail) payload.current_expiry_date=String(G._guaranteeDetail.current_expiry_date).slice(0,10);
   try{
     const saved=await api(id?'PUT':'POST',id?`/guarantees/${id}`:'/guarantees',payload);

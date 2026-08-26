@@ -622,6 +622,10 @@ button.guar-metric { font:inherit; cursor:pointer; }
 .guar-alert-row span { color:var(--ink-soft); font-size:12px; }
 .guar-limit-form { margin-bottom:16px; }
 .guar-limit-form h2 { margin-bottom:12px; }
+.guar-bank-form { margin-bottom:16px; }
+.guar-bank-form .row { align-items:flex-end; }
+.guar-bank-form .fld { flex:1; margin:0; }
+.guar-bank-name { min-width:240px; width:100%; }
 .guar-limit-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .guar-limit-card { padding:16px; background:var(--card); border:1px solid var(--line); border-radius:10px; }
 .guar-limit-head, .guar-limit-values, .guar-limit-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; }
