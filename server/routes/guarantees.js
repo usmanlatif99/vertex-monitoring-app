@@ -38,7 +38,7 @@ const upload = multer({
     ? cb(null, true) : cb(new Error('File type not allowed')),
 });
 
-async function requireAccess(level) {
+function requireAccess(level) {
   return async (req, res, next) => {
     try {
       if (req.user.role === 'admin') {
