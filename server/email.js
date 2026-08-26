@@ -192,7 +192,7 @@ module.exports = {
     }).join('');
     const html = shell(`
       <h2 style="margin:0 0 6px;color:#1a2332;font-size:17px">Bank Guarantee Expiry Alert</h2>
-      <p style="color:#6b7a90;margin:0 0 14px">${guarantees.length} active guarantee${guarantees.length > 1 ? 's require' : ' requires'} attention within the next two days.</p>
+      <p style="color:#6b7a90;margin:0 0 14px">${guarantees.length} active guarantee${guarantees.length > 1 ? 's require' : ' requires'} attention within the next seven days.</p>
       <table style="width:100%;border-collapse:collapse;border:1px solid #dde3ec">
         <thead><tr style="background:#f7f9fc"><th style="padding:8px 10px;text-align:left">Guarantee</th><th style="padding:8px 10px;text-align:left">Beneficiary</th><th style="padding:8px 10px;text-align:left">Bank</th><th style="padding:8px 10px;text-align:left">Expiry</th></tr></thead>
         <tbody>${rows}</tbody>

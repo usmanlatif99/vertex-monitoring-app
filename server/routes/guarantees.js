@@ -70,7 +70,7 @@ function computedStatusSql(alias = 'g') {
   return `CASE
     WHEN ${alias}.lifecycle_status <> 'active' THEN ${alias}.lifecycle_status
     WHEN ${alias}.current_expiry_date < CURRENT_DATE THEN 'expired'
-    WHEN ${alias}.current_expiry_date <= CURRENT_DATE + 2 THEN 'expiring_soon'
+    WHEN ${alias}.current_expiry_date <= CURRENT_DATE + 7 THEN 'expiring_soon'
     ELSE 'active'
   END`;
 }
@@ -208,7 +208,7 @@ router.get('/summary', viewAccess, async (_req, res) => {
     const { rows } = await db.query(`
       SELECT
         COUNT(*) FILTER (WHERE lifecycle_status='active')::int AS active_count,
-        COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 2)::int AS expiring_count,
+        COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7)::int AS expiring_count,
         COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date < CURRENT_DATE)::int AS expired_count,
         COUNT(*) FILTER (WHERE lifecycle_status IN ('returned','released') AND date_trunc('month', returned_date)=date_trunc('month', CURRENT_DATE))::int AS returned_month_count,
         COALESCE(SUM(amount) FILTER (WHERE lifecycle_status='active'),0) AS active_exposure
@@ -229,7 +229,7 @@ router.get('/alerts', viewAccess, async (_req, res) => {
       FROM bank_guarantees g
       LEFT JOIN users u ON u.id=g.responsible_user_id
       WHERE g.deleted_at IS NULL AND g.lifecycle_status='active'
-        AND g.current_expiry_date <= CURRENT_DATE + 2
+        AND g.current_expiry_date <= CURRENT_DATE + 7
       ORDER BY g.current_expiry_date, g.beneficiary`);
     res.json(rows);
   } catch (e) {

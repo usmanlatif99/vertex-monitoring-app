@@ -9,7 +9,7 @@ async function sendGuaranteeExpiryAlerts() {
            current_expiry_date, (current_expiry_date - CURRENT_DATE)::int AS remaining_days
     FROM bank_guarantees
     WHERE deleted_at IS NULL AND lifecycle_status='active'
-      AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 2
+      AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7
     ORDER BY current_expiry_date, beneficiary`);
 
   if (!guarantees.length) return { guarantees: 0, recipients: 0 };
@@ -27,7 +27,7 @@ async function sendGuaranteeExpiryAlerts() {
   for (const guarantee of guarantees) {
     const { rowCount } = await db.query(
       `INSERT INTO guarantee_alerts (guarantee_id, alert_date, alert_type, recipients)
-       VALUES ($1,$2,'expiry_2_day',$3)
+       VALUES ($1,$2,'expiry_7_day',$3)
        ON CONFLICT (guarantee_id, alert_date, alert_type) DO NOTHING`,
       [guarantee.id, today, emails.join(',')]
     );

@@ -3829,7 +3829,7 @@ async function renderGuaranteeRegister() {
   body.innerHTML = `
     <div class="guar-metrics">
       <div class="guar-metric"><span>Active guarantees</span><strong>${summary.active_count}</strong><small>${guarMoney(summary.active_exposure)} exposure</small></div>
-      <button class="guar-metric guar-metric-alert" onclick="guaranteeSwitchTab('alerts')"><span>Expiring in 2 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
+      <button class="guar-metric guar-metric-alert" onclick="guaranteeSwitchTab('alerts')"><span>Expiring in 7 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
       <div class="guar-metric guar-metric-danger"><span>Expired, not closed</span><strong>${summary.expired_count}</strong><small>Immediate review</small></div>
       <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Released guarantees</small></div>
     </div>
