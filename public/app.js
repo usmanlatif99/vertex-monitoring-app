@@ -3560,6 +3560,7 @@ function attAdminExport() {
   }
 
   const title = `Monthly Attendance Summary — ${attMonthLabel(month)}`;
+  const employeesPerPage = 16;
   const [year, monthNo] = month.split('-').map(Number);
   const daysInMonth = new Date(year, monthNo, 0).getDate();
   const dayNames = ['Su','Mo','Tu','We','Th','Fr','Sa'];
@@ -3606,8 +3607,8 @@ function attAdminExport() {
       totalAbsent += record.absent;
       return record;
     });
-    for (let i = 0; i < employees.length; i += 8) {
-      groups.push({ company, employees: employees.slice(i, i + 8) });
+    for (let i = 0; i < employees.length; i += employeesPerPage) {
+      groups.push({ company, employees: employees.slice(i, i + employeesPerPage) });
     }
   });
 
@@ -3638,7 +3639,7 @@ function attAdminExport() {
           <img src="${location.origin}/ve-logo.png" alt="Vertex Electronics">
           <div class="report-title">
             <h1>Monthly Attendance Summary</h1>
-            <div>Vertex Electronics &amp; Vision Engineering — ${attMonthLabel(month)}</div>
+            <div>${attMonthLabel(month)}</div>
           </div>
           <div class="report-meta"><strong>A4 · Landscape</strong><br>Generated: ${new Date().toLocaleDateString('en-GB')}</div>
         </header>
@@ -3649,7 +3650,7 @@ function attAdminExport() {
           <div><span>Late</span><strong>${totalLate}</strong></div>
           <div><span>Half days</span><strong>${totalHalfday}</strong></div>
         </div>
-        <div class="company-title">${esc(group.company)} — Employees ${pageIndex * 8 + 1}–${pageIndex * 8 + group.employees.length}</div>
+        <div class="company-title">${esc(group.company)} — Employees ${pageIndex * employeesPerPage + 1}–${pageIndex * employeesPerPage + group.employees.length}</div>
         <table>
           <colgroup><col class="employee-col"><col class="sum-col" span="4"><col class="day-col" span="${daysInMonth}"></colgroup>
           <thead>
@@ -3678,9 +3679,9 @@ function attAdminExport() {
         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .report-page { width: 283mm; min-height: 196mm; display: flex; flex-direction: column; break-after: page; page-break-after: always; }
       .report-page:last-child { break-after: auto; page-break-after: auto; }
-      .report-head { display: grid; grid-template-columns: 13mm 1fr 34mm; align-items: center;
+      .report-head { display: grid; grid-template-columns: 40mm 1fr 40mm; align-items: center;
         border-bottom: .7mm solid #1089cc; padding-bottom: 2mm; margin-bottom: 2mm; }
-      .report-head img { width: 10mm; height: 10mm; border-radius: 1mm; }
+      .report-head img { width: auto; height: 10mm; max-width: 20mm; object-fit: contain; border-radius: 1mm; }
       .report-title { text-align: center; }
       h1 { font-size: 13pt; line-height: 1.1; margin: 0; }
       .report-title div { font-size: 7pt; color: #555; margin-top: 1mm; }
@@ -3693,7 +3694,7 @@ function attAdminExport() {
       table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 6.2pt; }
       col.employee-col { width: 37mm; }
       col.sum-col { width: 6mm; }
-      th, td { height: 7mm; border: .25mm solid #aeb7c2; padding: .4mm; text-align: center; overflow: hidden; }
+      th, td { height: 8.5mm; border: .25mm solid #aeb7c2; padding: .4mm; text-align: center; overflow: hidden; }
       th { background: #e8eef5; font-weight: 700; }
       th.employee, td.employee { text-align: left; padding-left: 1.2mm; white-space: nowrap; text-overflow: ellipsis; }
       th.day-head { line-height: 1.05; }
