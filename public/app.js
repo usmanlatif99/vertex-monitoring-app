@@ -2555,8 +2555,10 @@ async function renderAttendance() {
   G._attDevice = deviceInfo;
 
   const today     = TODAY();
-  const approved  = (monthRecs || []).filter(r => r.approval_status === 'approved');
-  const present   = approved.filter(r => r.status === 'present').length;
+  const approved        = (monthRecs || []).filter(r => r.approval_status === 'approved');
+  const missedCheckouts = (monthRecs || []).filter(r => r.auto_checked_out).length;
+  const penaltyAbsents  = (monthRecs || []).filter(r => r.penalty_absent).length;
+  const present   = approved.filter(r => r.status === 'present' && !r.penalty_absent).length;
   const late      = approved.filter(r => r.status === 'late').length;
   const halfday   = approved.filter(r => r.status === 'halfday').length;
   const lateAbsents    = Math.floor(late / 3);
@@ -2569,7 +2571,7 @@ async function renderAttendance() {
     if (ds > today) break;
     if (new Date(ds + 'T00:00:00').getDay() !== 0) elapsedWork++;
   }
-  const absent = Math.max(0, elapsedWork - present - late - halfday) + lateAbsents + halfdayAbsents;
+  const absent = Math.max(0, elapsedWork - present - late - halfday - penaltyAbsents) + lateAbsents + halfdayAbsents + penaltyAbsents;
 
   // Warning banners
   const warnings = [];
@@ -2578,6 +2580,9 @@ async function renderAttendance() {
   else if (late >= 3)  warnings.push(`<div class="att-warn att-warn-red">You have <b>${late} late arrivals</b> this month — every 3 lates = 1 absent day. That's <b>${lateAbsents}</b> absent day(s) from lates.</div>`);
   if (halfday === 1)      warnings.push(`<div class="att-warn">You have <b>1 half day</b> this month — 1 more will count as 1 absent day.</div>`);
   else if (halfday >= 2)  warnings.push(`<div class="att-warn att-warn-red">You have <b>${halfday} half days</b> this month — every 2 half days = 1 absent day. That's <b>${halfdayAbsents}</b> absent day(s) from half days.</div>`);
+  if (missedCheckouts === 1)      warnings.push(`<div class="att-warn">You forgot to check out <b>once</b> this month — 2 more will mark you absent for that day.</div>`);
+  else if (missedCheckouts === 2) warnings.push(`<div class="att-warn att-warn-red">You forgot to check out <b>twice</b> this month — <b>one more will mark you absent!</b></div>`);
+  else if (missedCheckouts >= 3)  warnings.push(`<div class="att-warn att-warn-red">You have <b>${missedCheckouts} missed check-outs</b> this month. <b>${penaltyAbsents} absent day(s)</b> have been applied as penalty.</div>`);
   const lateWarning = warnings.join('');
 
   // Today panel
@@ -2783,10 +2788,13 @@ async function renderAttendance() {
             <th>Duration</th><th>Type</th><th>Remarks</th>
           </tr></thead>
           <tbody>
-            ${(monthRecs || []).slice().reverse().map(r => `
-              <tr>
+            ${(monthRecs || []).slice().reverse().map(r => {
+              const rowCls = r.penalty_absent ? ' class="att-penalty-row"' : r.auto_checked_out ? ' class="att-auto-row"' : '';
+              const penaltyBadge = r.penalty_absent ? ' <span class="att-penalty-label">Penalty: Absent</span>' : r.auto_checked_out ? ' <span class="att-auto-label">Auto</span>' : '';
+              return `
+              <tr${rowCls}>
                 <td>${fmt(r.date)}</td>
-                <td>${attStatusBadge(r)}</td>
+                <td>${attStatusBadge(r)}${penaltyBadge}</td>
                 <td>${attFmtTime(r.check_in_at)}</td>
                 <td>${attFmtTime(r.check_out_at)}</td>
                 <td>${attDuration(r.check_in_at, r.check_out_at)}</td>
@@ -2798,10 +2806,12 @@ async function renderAttendance() {
                   r.check_out_type === 'location'      ? 'GPS' :
                   r.check_out_type === 'out_of_office' ? 'Early leave' :
                   r.check_out_type === 'manual'        ? 'Manual' :
-                  r.check_out_type === 'webauthn'      ? '🔐 Biometric' : r.check_out_type
+                  r.check_out_type === 'webauthn'      ? '🔐 Biometric' :
+                  r.check_out_type === 'auto'          ? 'Auto' : r.check_out_type
                 ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
-              </tr>`).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table></div>`}
   </div>`;
@@ -3255,15 +3265,17 @@ async function renderAttAdminDaily() {
         </tr></thead>
         <tbody>
           ${list.map(r => {
-            const isAuto = r.record?.auto_checked_out;
+            const isAuto    = r.record?.auto_checked_out;
+            const isPenalty = r.record?.penalty_absent;
+            const rowCls    = isPenalty ? ' class="att-penalty-row"' : isAuto ? ' class="att-auto-row"' : '';
             const warnBadge = r.auto_checkout_count >= 2
-              ? '<span class="att-auto-warn" title="' + r.auto_checkout_count + ' auto check-outs this month">⚠ ' + r.auto_checkout_count + 'x</span>'
+              ? '<span class="att-auto-warn" title="' + r.auto_checkout_count + ' missed check-outs this month">⚠ ' + r.auto_checkout_count + 'x</span>'
               : '';
             return `
-            <tr${isAuto ? ' class="att-auto-row"' : ''}>
+            <tr${rowCls}>
               <td>${esc(r.name)}${warnBadge}</td>
               <td class="muted small">${esc(r.department || '—')}</td>
-              <td>${attStatusBadge(r.record)}</td>
+              <td>${attStatusBadge(r.record)}${isPenalty ? ' <span class="att-penalty-label">Penalty</span>' : ''}</td>
               <td>${attFmtTime(r.record?.check_in_at)}</td>
               <td>${attFmtTime(r.record?.check_out_at)}${isAuto ? ' <span class="att-auto-label">Auto</span>' : ''}</td>
               <td>${r.record ? attDuration(r.record.check_in_at, r.record.check_out_at) : '—'}</td>

@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS checkin_remark TEXT;
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_checked_out BOOLEAN DEFAULT FALSE;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS penalty_absent BOOLEAN DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_att_user_date ON attendance(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_att_date      ON attendance(date);

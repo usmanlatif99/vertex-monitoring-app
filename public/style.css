@@ -482,6 +482,13 @@ tr.att-auto-row:hover { background:#fee2e2; }
   border-radius:4px; padding:1px 5px; margin-left:5px; vertical-align:middle;
   cursor:default;
 }
+tr.att-penalty-row { background:#fdf2f8; }
+tr.att-penalty-row:hover { background:#fce7f3; }
+.att-penalty-label {
+  display:inline-block; font-size:10px; font-weight:700;
+  background:#fce7f3; color:#9d174d; border:1px solid #f9a8d4;
+  border-radius:4px; padding:1px 5px; margin-left:4px; vertical-align:middle;
+}
 
 /* Admin daily summary */
 .att-daily-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }

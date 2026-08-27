@@ -94,21 +94,52 @@ cron.schedule('0 3 * * *', async () => {
   }
 });
 
-// Auto check-out at 5:00 PM PKT (12:00 UTC)
-cron.schedule('0 12 * * *', async () => {
+// Auto check-out at 11:55 PM PKT (18:55 UTC) with missed check-out penalty
+cron.schedule('55 18 * * *', async () => {
   try {
-    const todayStr  = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10);
-    const checkoutAt = new Date(todayStr + 'T12:00:00.000Z'); // 17:00 PKT = 12:00 UTC
-    const { rows } = await db.query(
-      `UPDATE attendance
-       SET check_out_at = $1, check_out_type = 'auto', auto_checked_out = TRUE,
-           checkout_remark = 'Auto check-out at 5:00 PM — no manual check-out recorded'
-       WHERE date = $2 AND check_in_at IS NOT NULL AND check_out_at IS NULL
-       RETURNING user_id`,
-      [checkoutAt, todayStr]
+    const todayStr   = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10);
+    const checkoutAt = new Date(todayStr + 'T18:55:00.000Z'); // 23:55 PKT = 18:55 UTC
+
+    const { rows: open } = await db.query(
+      `SELECT id, user_id FROM attendance
+       WHERE date = $1 AND check_in_at IS NOT NULL AND check_out_at IS NULL`,
+      [todayStr]
     );
-    if (rows.length > 0) {
-      console.log(`[cron] Auto check-out: ${rows.length} employee(s) for ${todayStr}`);
+
+    for (const rec of open) {
+      // Count prior auto check-outs this month (excluding today)
+      const { rows: cnt } = await db.query(
+        `SELECT COUNT(*)::int AS n FROM attendance
+         WHERE user_id = $1 AND auto_checked_out = TRUE
+           AND date_trunc('month', date) = date_trunc('month', $2::date)
+           AND date < $2`,
+        [rec.user_id, todayStr]
+      );
+      const priorMissed = cnt[0].n;
+      const isPenalty   = priorMissed >= 2; // 3rd missed check-out triggers penalty
+
+      await db.query(
+        `UPDATE attendance
+         SET check_out_at = $1, check_out_type = 'auto', auto_checked_out = TRUE,
+             checkout_remark = $2, penalty_absent = $3
+         WHERE id = $4`,
+        [
+          checkoutAt,
+          isPenalty
+            ? 'Auto check-out at 11:55 PM — penalty absent applied (3rd missed check-out this month)'
+            : 'Auto check-out at 11:55 PM — no manual check-out recorded',
+          isPenalty,
+          rec.id,
+        ]
+      );
+
+      if (isPenalty) {
+        console.log(`[cron] Penalty absent: user ${rec.user_id} on ${todayStr} (${priorMissed + 1} missed this month)`);
+      }
+    }
+
+    if (open.length > 0) {
+      console.log(`[cron] Auto check-out: ${open.length} employee(s) for ${todayStr}`);
     }
   } catch (e) {
     console.error('[cron] Auto check-out failed:', e.message);
