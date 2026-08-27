@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS checkin_remark TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_checked_out BOOLEAN DEFAULT FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_att_user_date ON attendance(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_att_date      ON attendance(date);
@@ -307,3 +308,45 @@ CREATE INDEX IF NOT EXISTS idx_guarantees_beneficiary ON bank_guarantees(benefic
 CREATE INDEX IF NOT EXISTS idx_guarantee_extensions ON guarantee_extensions(guarantee_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_guarantee_documents ON guarantee_documents(guarantee_id, uploaded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_guarantee_audit ON guarantee_audit_log(guarantee_id, created_at DESC);
+
+-- Staging area for incomplete or contradictory legacy guarantee records.
+-- These rows are intentionally excluded from exposure, limits and expiry alerts
+-- until an administrator validates and promotes them to bank_guarantees.
+CREATE TABLE IF NOT EXISTS guarantee_unconfirmed_imports (
+  id                   SERIAL PRIMARY KEY,
+  source_sheet         VARCHAR(120) NOT NULL,
+  source_row           INTEGER NOT NULL,
+  guarantee_no         VARCHAR(120),
+  company              VARCHAR(10),
+  issuing_bank         VARCHAR(150),
+  bank_id              INTEGER REFERENCES guarantee_banks(id),
+  beneficiary          VARCHAR(250),
+  guarantee_type       VARCHAR(40),
+  issue_date           DATE,
+  original_expiry_date DATE,
+  current_expiry_date  DATE,
+  amount               NUMERIC(18,2),
+  cash_margin_percent  NUMERIC(7,3),
+  reference_no         VARCHAR(300),
+  description          TEXT,
+  source_status        VARCHAR(80),
+  lifecycle_status     VARCHAR(20),
+  returned_date        DATE,
+  remarks              TEXT,
+  review_issues        TEXT NOT NULL,
+  raw_data             JSONB NOT NULL,
+  review_state         VARCHAR(20) NOT NULL DEFAULT 'unconfirmed',
+  admin_note           TEXT,
+  reviewed_by          INTEGER REFERENCES users(id),
+  reviewed_at          TIMESTAMPTZ,
+  confirmed_guarantee_id INTEGER REFERENCES bank_guarantees(id),
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (source_sheet, source_row)
+);
+CREATE INDEX IF NOT EXISTS idx_guarantee_unconfirmed_state
+  ON guarantee_unconfirmed_imports(review_state, source_sheet, source_row);
+
+-- Released and Returned are the same operational outcome in this portal.
+UPDATE bank_guarantees SET lifecycle_status='returned', updated_at=NOW()
+WHERE lifecycle_status='released';

@@ -94,6 +94,27 @@ cron.schedule('0 3 * * *', async () => {
   }
 });
 
+// Auto check-out at 5:00 PM PKT (12:00 UTC)
+cron.schedule('0 12 * * *', async () => {
+  try {
+    const todayStr  = new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10);
+    const checkoutAt = new Date(todayStr + 'T12:00:00.000Z'); // 17:00 PKT = 12:00 UTC
+    const { rows } = await db.query(
+      `UPDATE attendance
+       SET check_out_at = $1, check_out_type = 'auto', auto_checked_out = TRUE,
+           checkout_remark = 'Auto check-out at 5:00 PM — no manual check-out recorded'
+       WHERE date = $2 AND check_in_at IS NOT NULL AND check_out_at IS NULL
+       RETURNING user_id`,
+      [checkoutAt, todayStr]
+    );
+    if (rows.length > 0) {
+      console.log(`[cron] Auto check-out: ${rows.length} employee(s) for ${todayStr}`);
+    }
+  } catch (e) {
+    console.error('[cron] Auto check-out failed:', e.message);
+  }
+});
+
 // Bank Guarantee expiry alerts — 8:15 AM PKT (03:15 UTC)
 cron.schedule('15 3 * * *', async () => {
   try {

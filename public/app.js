@@ -7,7 +7,7 @@ const G = {
   mf: { search: '', status: '', priority: '' },
   _teamTasks: [], _myTasks: [], _archivedTasks: [], _selectedIds: new Set(), _archivedIds: new Set(), _dashFilter: null,
   gf: { search: '', bank: '', status: '', type: '', company: '' },
-  guaranteeTab: 'register', guaranteeDetailId: null,
+  guaranteeTab: 'register', guaranteeAlertFilter: 'upcoming', guaranteeUnconfirmedState: 'unconfirmed', guaranteeDetailId: null,
 };
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -31,6 +31,13 @@ const TODAY = () => {
 function fmt(d) {
   if (!d) return '—';
   return new Date(d.slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function fmtFull(d) {
+  if (!d) return '—';
+  return new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  });
 }
 
 function fmtLong(d) {
@@ -3247,13 +3254,18 @@ async function renderAttAdminDaily() {
           <th>Check In</th><th>Check Out</th><th>Duration</th><th>Type</th><th>Action</th>
         </tr></thead>
         <tbody>
-          ${list.map(r => `
-            <tr>
-              <td>${esc(r.name)}</td>
+          ${list.map(r => {
+            const isAuto = r.record?.auto_checked_out;
+            const warnBadge = r.auto_checkout_count >= 2
+              ? '<span class="att-auto-warn" title="' + r.auto_checkout_count + ' auto check-outs this month">⚠ ' + r.auto_checkout_count + 'x</span>'
+              : '';
+            return `
+            <tr${isAuto ? ' class="att-auto-row"' : ''}>
+              <td>${esc(r.name)}${warnBadge}</td>
               <td class="muted small">${esc(r.department || '—')}</td>
               <td>${attStatusBadge(r.record)}</td>
               <td>${attFmtTime(r.record?.check_in_at)}</td>
-              <td>${attFmtTime(r.record?.check_out_at)}</td>
+              <td>${attFmtTime(r.record?.check_out_at)}${isAuto ? ' <span class="att-auto-label">Auto</span>' : ''}</td>
               <td>${r.record ? attDuration(r.record.check_in_at, r.record.check_out_at) : '—'}</td>
               <td class="muted small">${r.record ? (
                 r.record.check_in_type === 'webauthn' ? '🔐 Biometric' :
@@ -3266,7 +3278,8 @@ async function renderAttAdminDaily() {
                   ${r.record ? 'Edit' : 'Mark'}
                 </button>
               </td>
-            </tr>`).join('')}
+            </tr>`;
+          }).join('')}
         </tbody>
       </table></div>`;
   }
@@ -3761,7 +3774,7 @@ function guarMoney(value) {
 
 function guarStatusLabel(status) {
   return ({ active:'Active', expiring_soon:'Expiring Soon', expired:'Expired', returned:'Returned',
-    released:'Released', encashed:'Encashed', cancelled:'Cancelled' })[status] || status;
+    released:'Returned', encashed:'Encashed', cancelled:'Cancelled' })[status] || status;
 }
 
 function guarStatusBadge(status) {
@@ -3795,12 +3808,13 @@ async function renderGuarantees() {
       </div>
     </div>
     <div class="guar-tabs">
-      ${[['register','Register'],['alerts','Expiry Alerts'],['limits','Bank Limits'],['history','Extension History'],...(guaranteeCan('administrator')?[['banks','Manage Banks']]:[])].map(([id,label]) =>
+      ${[['register','Register'],['alerts','Expiry Alerts'],...(guaranteeCan('administrator')?[['unconfirmed','Unconfirmed Imports']]:[]),['limits','Bank Limits'],['history','Extension History'],...(guaranteeCan('administrator')?[['banks','Manage Banks']]:[])].map(([id,label]) =>
         `<button class="${tab===id?'active':''}" onclick="guaranteeSwitchTab('${id}')">${label}</button>`).join('')}
     </div>
     <div id="guarantee-body"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>`;
   if (tab === 'register') await renderGuaranteeRegister();
   else if (tab === 'alerts') await renderGuaranteeAlerts();
+  else if (tab === 'unconfirmed' && guaranteeCan('administrator')) await renderGuaranteeUnconfirmed();
   else if (tab === 'limits') await renderGuaranteeLimits();
   else if (tab === 'history') await renderGuaranteeHistory();
   else if (tab === 'banks' && guaranteeCan('administrator')) await renderGuaranteeBanks();
@@ -3829,15 +3843,15 @@ async function renderGuaranteeRegister() {
   body.innerHTML = `
     <div class="guar-metrics">
       <div class="guar-metric"><span>Active guarantees</span><strong>${summary.active_count}</strong><small>${guarMoney(summary.active_exposure)} exposure</small></div>
-      <button class="guar-metric guar-metric-alert" onclick="guaranteeSwitchTab('alerts')"><span>Expiring in 7 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
-      <div class="guar-metric guar-metric-danger"><span>Expired, not closed</span><strong>${summary.expired_count}</strong><small>Immediate review</small></div>
-      <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Released guarantees</small></div>
+      <button class="guar-metric guar-metric-alert" onclick="guaranteeOpenAlerts('upcoming')"><span>Expiring in 7 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
+      <button class="guar-metric guar-metric-danger" onclick="guaranteeOpenAlerts('expired')"><span>Expired, not closed</span><strong>${summary.expired_count}</strong><small>Immediate review</small></button>
+      <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Returned guarantees</small></div>
     </div>
     <div class="filter-bar guar-filter-bar">
       <div class="search-wrap">${SEARCH_ICON}<input class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeFilter('search',this.value)"></div>
       <select onchange="guaranteeFilter('bank',this.value)"><option value="">All banks</option>${banks.map(b=>`<option value="${esc(b.name)}" ${G.gf.bank===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
       <select onchange="guaranteeFilter('company',this.value)"><option value="">All companies</option><option value="VTX" ${G.gf.company==='VTX'?'selected':''}>Vertex</option><option value="VSN" ${G.gf.company==='VSN'?'selected':''}>Vision</option><option value="ALL" ${G.gf.company==='ALL'?'selected':''}>Both</option></select>
-      <select onchange="guaranteeFilter('status',this.value)"><option value="">All statuses</option>${['active','expiring_soon','expired','returned','released','encashed','cancelled'].map(s=>`<option value="${s}" ${G.gf.status===s?'selected':''}>${guarStatusLabel(s)}</option>`).join('')}</select>
+      <select onchange="guaranteeFilter('status',this.value)"><option value="">All statuses</option>${['active','expiring_soon','expired','returned','encashed','cancelled'].map(s=>`<option value="${s}" ${G.gf.status===s?'selected':''}>${guarStatusLabel(s)}</option>`).join('')}</select>
       <select onchange="guaranteeFilter('type',this.value)"><option value="">All types</option>${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${G.gf.type===v?'selected':''}>${l}</option>`).join('')}</select>
       <button class="btn btn-ghost btn-sm" onclick="guaranteeClearFilters()">Clear</button>
     </div>
@@ -3846,7 +3860,7 @@ async function renderGuaranteeRegister() {
       <tbody>${rows.length ? rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.id})">
         <td><strong>${esc(r.guarantee_no)}</strong>${r.reference_no?`<div class="muted small">${esc(r.reference_no)}</div>`:''}</td>
         <td><span class="code ${r.company.toLowerCase()}">${r.company}</span></td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td>
-        <td>${esc(GUAR_TYPE_LABEL[r.guarantee_type] || r.guarantee_type)}</td><td>${fmt(r.current_expiry_date)}</td>
+        <td>${esc(GUAR_TYPE_LABEL[r.guarantee_type] || r.guarantee_type)}</td><td>${fmtFull(r.current_expiry_date)}</td>
         <td class="guar-days">${r.remaining_days}</td><td class="right">${guarMoney(r.amount)}</td><td>${guarStatusBadge(r.computed_status)}</td>
       </tr>`).join('') : '<tr><td colspan="9"><div class="empty">No guarantees match these filters.</div></td></tr>'}</tbody>
     </table></div>`;
@@ -3866,11 +3880,107 @@ function guaranteeClearFilters() {
 async function renderGuaranteeAlerts() {
   const body = document.getElementById('guarantee-body');
   const rows = await api('GET', '/guarantees/alerts') || [];
-  body.innerHTML = rows.length ? `<div class="guar-alert-list">${rows.map(r=>`
-    <button class="guar-alert-row" onclick="showGuaranteeDetail(${r.id})">
+  const upcoming = rows.filter(r => Number(r.remaining_days) >= 0 && Number(r.remaining_days) <= 7);
+  const expired = rows.filter(r => Number(r.remaining_days) < 0);
+  const filter = G.guaranteeAlertFilter === 'expired' ? 'expired' : 'upcoming';
+  const visible = filter === 'expired' ? expired : upcoming;
+  body.innerHTML = `<div class="guar-alert-tabs">
+    <button class="${filter==='upcoming'?'active':''}" onclick="guaranteeSetAlertFilter('upcoming')">Expiring within 7 days <span>${upcoming.length}</span></button>
+    <button class="${filter==='expired'?'active':''}" onclick="guaranteeSetAlertFilter('expired')">Expired—not closed <span>${expired.length}</span></button>
+  </div>${visible.length ? `<div class="guar-alert-list">${visible.map(r=>`
+    <button class="guar-alert-row ${filter==='expired'?'guar-alert-row-expired':''}" onclick="showGuaranteeDetail(${r.id})">
       <div><strong>${esc(r.guarantee_no)}</strong><span>${esc(r.beneficiary)} · ${esc(r.issuing_bank)}</span></div>
-      <div><strong>${r.remaining_days < 0 ? `${Math.abs(r.remaining_days)} day(s) overdue` : r.remaining_days === 0 ? 'Expires today' : `${r.remaining_days} day(s) remaining`}</strong><span>${fmt(r.current_expiry_date)} · ${guarMoney(r.amount)}</span></div>
-    </button>`).join('')}</div>` : '<div class="card"><div class="empty">No active guarantees require expiry attention.</div></div>';
+      <div><strong>${r.remaining_days < 0 ? `${Math.abs(r.remaining_days)} day(s) overdue` : r.remaining_days === 0 ? 'Expires today' : `${r.remaining_days} day(s) remaining`}</strong><span>${fmtFull(r.current_expiry_date)} · ${guarMoney(r.amount)}</span></div>
+    </button>`).join('')}</div>` : `<div class="card"><div class="empty">${filter==='expired'?'No active guarantees are expired and awaiting closure.':'No active guarantees expire within the next 7 days.'}</div></div>`}`;
+}
+
+function guaranteeOpenAlerts(filter) {
+  G.guaranteeAlertFilter = filter === 'expired' ? 'expired' : 'upcoming';
+  guaranteeSwitchTab('alerts');
+}
+
+function guaranteeSetAlertFilter(filter) {
+  G.guaranteeAlertFilter = filter === 'expired' ? 'expired' : 'upcoming';
+  renderGuaranteeAlerts();
+}
+
+async function renderGuaranteeUnconfirmed() {
+  const body = document.getElementById('guarantee-body');
+  if (!guaranteeCan('administrator')) return guaranteeSwitchTab('register');
+  const states = ['unconfirmed','confirmed','excluded'];
+  const groups = await Promise.all(states.map(state => api('GET', `/guarantees/unconfirmed?state=${state}`)));
+  const byState = Object.fromEntries(states.map((state,index)=>[state,groups[index]||[]]));
+  const state = states.includes(G.guaranteeUnconfirmedState) ? G.guaranteeUnconfirmedState : 'unconfirmed';
+  const rows = byState[state];
+  G._unconfirmedVisible = rows;
+  G._unconfirmedGuarantees = Object.fromEntries(groups.flat().map(record=>[record.id,record]));
+  body.innerHTML = `<div class="guar-review-head">
+    <div><h2>Unconfirmed Imports</h2><p>Legacy Excel rows requiring correction. These records do not affect exposure, limits, alerts or confirmed reports.</p></div>
+    <div class="guar-alert-tabs">${states.map(item=>`<button class="${state===item?'active':''}" onclick="guaranteeSetUnconfirmedState('${item}')">${item==='unconfirmed'?'Needs review':item[0].toUpperCase()+item.slice(1)} <span>${byState[item].length}</span></button>`).join('')}</div>
+  </div><div class="table-wrap"><table class="guar-table guar-review-table"><thead><tr><th>Guarantee</th><th>Source</th><th>Bank / Beneficiary</th><th>Source status</th><th>Review issue</th><th>Action</th></tr></thead><tbody>
+    ${rows.length?rows.map(r=>`<tr><td><strong>${esc(r.guarantee_no||'Missing number')}</strong><div class="muted small">${esc(r.company||'Company unclear')}</div></td><td>${esc(r.source_sheet)}<div class="muted small">Row ${r.source_row}</div></td><td>${esc(r.selected_bank_name||r.issuing_bank||'Bank unclear')}<div class="muted small">${esc(r.beneficiary||'Beneficiary missing')}</div></td><td><span class="guar-status ${r.lifecycle_status==='returned'?'guar-returned':'guar-active'}">${esc(r.source_status||guarStatusLabel(r.lifecycle_status))}</span></td><td><div class="guar-review-issue">${esc(r.review_issues)}</div></td><td>${state==='unconfirmed'?`<button class="btn btn-ghost btn-sm" onclick="showUnconfirmedGuarantee(${r.id})">Review</button>`:`<span class="muted small">${r.reviewed_by_name?`By ${esc(r.reviewed_by_name)}`:'—'}</span>`}</td></tr>`).join(''):'<tr><td colspan="6"><div class="empty">No records in this category.</div></td></tr>'}
+  </tbody></table></div>`;
+}
+
+function guaranteeSetUnconfirmedState(state) {
+  G.guaranteeUnconfirmedState = state;
+  renderGuaranteeUnconfirmed();
+}
+
+async function showUnconfirmedGuarantee(id) {
+  const r = G._unconfirmedGuarantees?.[id];
+  if (!r) return toast('Unconfirmed record not found','error');
+  const banks = await api('GET','/guarantees/banks');
+  const dateValue = value => value ? String(value).slice(0,10) : '';
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>Review imported guarantee</h2><div class="sub">${esc(r.source_sheet)} · row ${r.source_row} · source status: ${esc(r.source_status||'Not stated')}</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
+    <div class="guar-review-warning"><strong>Why this needs review</strong><span>${esc(r.review_issues)}</span></div>
+    <form onsubmit="saveUnconfirmedGuarantee(event,${id},false)"><div class="guar-form-grid">
+      <div class="fld"><label>Company *</label><select id="ug-company"><option value="">Select company</option><option value="VTX" ${r.company==='VTX'?'selected':''}>Vertex Electronics</option><option value="VSN" ${r.company==='VSN'?'selected':''}>Vision Engineering</option><option value="ALL" ${r.company==='ALL'?'selected':''}>Both</option></select></div>
+      <div class="fld"><label>Guarantee number *</label><input id="ug-no" value="${esc(r.guarantee_no||'')}"></div>
+      <div class="fld"><label>Issuing bank *</label><select id="ug-bank"><option value="">Select approved bank</option>${banks.map(b=>`<option value="${b.id}" ${Number(r.bank_id)===Number(b.id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select></div>
+      <div class="fld"><label>Beneficiary *</label><input id="ug-beneficiary" value="${esc(r.beneficiary||'')}"></div>
+      <div class="fld"><label>Guarantee type *</label><select id="ug-type"><option value="">Select type</option>${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${r.guarantee_type===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="fld"><label>Portal status *</label><select id="ug-status">${['active','returned','encashed','cancelled'].map(v=>`<option value="${v}" ${r.lifecycle_status===v?'selected':''}>${guarStatusLabel(v)}</option>`).join('')}</select></div>
+      <div class="fld"><label>Issue date *</label><input id="ug-issue" type="date" value="${dateValue(r.issue_date)}"></div>
+      <div class="fld"><label>Original expiry *</label><input id="ug-original-expiry" type="date" value="${dateValue(r.original_expiry_date)}"></div>
+      <div class="fld"><label>Effective expiry *</label><input id="ug-current-expiry" type="date" value="${dateValue(r.current_expiry_date)}"></div>
+      <div class="fld"><label>Returned date</label><input id="ug-returned" type="date" value="${dateValue(r.returned_date)}"></div>
+      <div class="fld"><label>Amount (PKR) *</label><input id="ug-amount" type="number" min="0" step="0.01" value="${r.amount??''}"></div>
+      <div class="fld"><label>Cash margin (%)</label><input id="ug-margin" type="number" min="0" max="100" step="0.001" value="${r.cash_margin_percent??''}"></div>
+      <div class="fld guar-wide"><label>Tender / LOI / PO reference</label><input id="ug-reference" value="${esc(r.reference_no||'')}"></div>
+      <div class="fld guar-wide"><label>Description</label><textarea id="ug-description" rows="2">${esc(r.description||'')}</textarea></div>
+      <div class="fld guar-wide"><label>Remarks</label><textarea id="ug-remarks" rows="2">${esc(r.remarks||'')}</textarea></div>
+      <div class="fld guar-wide"><label>Administrator review note</label><textarea id="ug-note" rows="2" placeholder="Explain the correction or exclusion decision">${esc(r.admin_note||'')}</textarea></div>
+    </div><div class="guar-form-actions"><button type="button" class="btn btn-danger" onclick="excludeUnconfirmedGuarantee(${id})">Exclude</button><span class="guar-action-spacer"></span><button class="btn btn-ghost">Save review</button><button type="button" class="btn btn-amber" onclick="saveUnconfirmedGuarantee(event,${id},true)">Confirm and transfer</button></div></form>`,true);
+}
+
+function unconfirmedPayload() {
+  return { company:document.getElementById('ug-company').value,guarantee_no:document.getElementById('ug-no').value,
+    bank_id:document.getElementById('ug-bank').value,beneficiary:document.getElementById('ug-beneficiary').value,
+    guarantee_type:document.getElementById('ug-type').value,lifecycle_status:document.getElementById('ug-status').value,
+    issue_date:document.getElementById('ug-issue').value,original_expiry_date:document.getElementById('ug-original-expiry').value,
+    current_expiry_date:document.getElementById('ug-current-expiry').value,returned_date:document.getElementById('ug-returned').value,
+    amount:document.getElementById('ug-amount').value,cash_margin_percent:document.getElementById('ug-margin').value,
+    reference_no:document.getElementById('ug-reference').value,description:document.getElementById('ug-description').value,
+    remarks:document.getElementById('ug-remarks').value,admin_note:document.getElementById('ug-note').value };
+}
+
+async function saveUnconfirmedGuarantee(event,id,confirmRecord) {
+  event.preventDefault();
+  try {
+    await api('PUT',`/guarantees/unconfirmed/${id}`,unconfirmedPayload());
+    if (confirmRecord) await api('POST',`/guarantees/unconfirmed/${id}/confirm`,{});
+    toast(confirmRecord?'Guarantee confirmed and transferred':'Review changes saved','success');
+    closeGuaranteeModal(); renderGuaranteeUnconfirmed();
+  } catch(ex) { toast(ex.message,'error'); }
+}
+
+async function excludeUnconfirmedGuarantee(id) {
+  const note=document.getElementById('ug-note').value.trim();
+  if(!note) return toast('Add an administrator note before excluding this record','error');
+  if(!confirm('Exclude this record from the import review queue?')) return;
+  try { await api('POST',`/guarantees/unconfirmed/${id}/exclude`,{admin_note:note}); toast('Record excluded','success'); closeGuaranteeModal(); renderGuaranteeUnconfirmed(); }
+  catch(ex){ toast(ex.message,'error'); }
 }
 
 async function renderGuaranteeLimits() {
@@ -3921,7 +4031,7 @@ async function saveGuaranteeBank(id, active) {
 async function renderGuaranteeHistory() {
   const body = document.getElementById('guarantee-body');
   const rows = await api('GET','/guarantees/history') || [];
-  body.innerHTML = `<div class="table-wrap"><table class="guar-table"><thead><tr><th>Guarantee</th><th>Bank</th><th>Beneficiary</th><th>Previous expiry</th><th>New expiry</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.guarantee_id})"><td><strong>${esc(r.guarantee_no)}</strong></td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td><td>${fmt(r.previous_expiry_date)}</td><td>${fmt(r.new_expiry_date)}</td><td>${esc(r.amendment_no||'—')}</td><td>${esc(r.created_by_name)}</td></tr>`).join(''):'<tr><td colspan="7"><div class="empty">No extensions recorded.</div></td></tr>'}</tbody></table></div>`;
+  body.innerHTML = `<div class="table-wrap"><table class="guar-table"><thead><tr><th>Guarantee</th><th>Bank</th><th>Beneficiary</th><th>Previous expiry</th><th>New expiry</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${rows.length?rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.guarantee_id})"><td><strong>${esc(r.guarantee_no)}</strong></td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td><td>${fmtFull(r.previous_expiry_date)}</td><td>${fmtFull(r.new_expiry_date)}</td><td>${esc(r.amendment_no||'—')}</td><td>${esc(r.created_by_name)}</td></tr>`).join(''):'<tr><td colspan="7"><div class="empty">No extensions recorded.</div></td></tr>'}</tbody></table></div>`;
 }
 
 function guaranteeModal(html, wide=false) {
@@ -3981,10 +4091,10 @@ async function showGuaranteeDetail(id) {
   const docs=(r.documents||[]).map(d=>`<div class="guar-doc"><a href="#" onclick="guaranteeDownload(event,${d.id})">${esc(d.original_name)}</a><span>${Math.round(d.file_size/1024)} KB · ${esc(d.uploaded_by_name)}</span>${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="deleteGuaranteeDocument(${d.id},${r.id})">Delete</button>`:''}</div>`).join('')||'<div class="muted small">No documents uploaded.</div>';
   guaranteeModal(`<div class="guar-modal-head"><div><h2>${esc(r.guarantee_no)}</h2><div class="sub">${esc(r.issuing_bank)} · ${esc(r.beneficiary)}</div></div><div class="guar-actions">${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal();showGuaranteeForm(${r.id})">Edit</button><button class="btn btn-ghost btn-sm" onclick="guaranteeExtend(${r.id})">Extend</button>${r.lifecycle_status==='active'?`<button class="btn btn-ghost btn-sm" onclick="guaranteeClose(${r.id})">Close</button>`:''}`:''}${guaranteeCan('administrator')?`<button class="btn btn-danger btn-sm" onclick="deleteGuarantee(${r.id})">Delete</button>`:''}<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">×</button></div></div>
     <div class="guar-detail-top">${guarStatusBadge(r.computed_status)}<strong>${guarMoney(r.amount)}</strong><span>${r.remaining_days} day(s)</span></div>
-    <div class="guar-detail-grid">${[['Company',r.company],['Type',GUAR_TYPE_LABEL[r.guarantee_type]],['Issue date',fmt(r.issue_date)],['Original expiry',fmt(r.original_expiry_date)],['Effective expiry',fmt(r.current_expiry_date)],['Reference',r.reference_no||'—'],['Responsible',r.responsible_name||'—'],['Cash margin',r.cash_margin_percent?`${r.cash_margin_percent}%`:'—']].map(([l,v])=>`<div><span>${l}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
+    <div class="guar-detail-grid">${[['Company',r.company],['Type',GUAR_TYPE_LABEL[r.guarantee_type]],['Issue date',fmtFull(r.issue_date)],['Original expiry',fmtFull(r.original_expiry_date)],['Effective expiry',fmtFull(r.current_expiry_date)],['Reference',r.reference_no||'—'],['Responsible',r.responsible_name||'—'],['Cash margin',r.cash_margin_percent?`${r.cash_margin_percent}%`:'—']].map(([l,v])=>`<div><span>${l}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
     ${r.description?`<div class="guar-note"><strong>Description</strong><p>${esc(r.description)}</p></div>`:''}${r.remarks?`<div class="guar-note"><strong>Remarks</strong><p>${esc(r.remarks)}</p></div>`:''}
     <div class="guar-detail-section"><div class="guar-section-head"><h3>Documents</h3>${guaranteeCan('editor')?`<label class="btn btn-ghost btn-sm">Upload<input type="file" hidden onchange="uploadGuaranteeDocument(${r.id},this)"></label>`:''}</div>${docs}</div>
-    <div class="guar-detail-section"><h3>Extension history</h3>${r.extensions?.length?`<div class="table-wrap"><table class="guar-table"><thead><tr><th>Previous</th><th>New</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${r.extensions.map(x=>`<tr><td>${fmt(x.previous_expiry_date)}</td><td>${fmt(x.new_expiry_date)}</td><td>${esc(x.amendment_no||'—')}</td><td>${esc(x.created_by_name)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted small">No extensions recorded.</div>'}</div>
+    <div class="guar-detail-section"><h3>Extension history</h3>${r.extensions?.length?`<div class="table-wrap"><table class="guar-table"><thead><tr><th>Previous</th><th>New</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${r.extensions.map(x=>`<tr><td>${fmtFull(x.previous_expiry_date)}</td><td>${fmtFull(x.new_expiry_date)}</td><td>${esc(x.amendment_no||'—')}</td><td>${esc(x.created_by_name)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted small">No extensions recorded.</div>'}</div>
     <div class="guar-detail-section"><h3>Audit trail</h3><div class="guar-audit">${(r.audit||[]).map(a=>`<div><strong>${esc(a.action)}</strong><span>${esc(a.changed_by_name)} · ${fmtDateTime(a.created_at)}</span></div>`).join('')}</div></div>`,true);
 }
 
@@ -3996,7 +4106,7 @@ async function guaranteeExtend(id){
 async function submitGuaranteeExtension(e,id){e.preventDefault();try{await api('POST',`/guarantees/${id}/extensions`,{new_expiry_date:document.getElementById('ge-date').value,amendment_no:document.getElementById('ge-amendment').value,remarks:document.getElementById('ge-remarks').value});toast('Extension recorded','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}}
 
 async function guaranteeClose(id){
-  const status=prompt('Enter closing status: returned, released, encashed, or cancelled','returned'); if(!status)return;
+  const status=prompt('Enter closing status: returned, encashed, or cancelled','returned'); if(!status)return;
   const remarks=prompt('Closing remarks (optional)','')||'';
   try{await api('POST',`/guarantees/${id}/close`,{status:status.toLowerCase(),returned_date:TODAY(),remarks});toast('Guarantee closed','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}
 }
@@ -4010,6 +4120,7 @@ async function guaranteeDownload(e,id){e.preventDefault();try{const r=await fetc
 async function deleteGuaranteeDocument(docId,guaranteeId){if(!confirm('Delete this document?'))return;try{await api('DELETE',`/guarantees/documents/${docId}`);toast('Document deleted','success');showGuaranteeDetail(guaranteeId);}catch(ex){toast(ex.message,'error');}}
 
 function guaranteeExport(){
+  if(G.guaranteeTab==='unconfirmed') return guaranteeExportUnconfirmed();
   const rows=G._guarantees||[];if(!rows.length)return toast('No guarantee records to export','error');
   const headers=['Guarantee No','Company','Issuing Bank','Beneficiary','Type','Issue Date','Effective Expiry','Remaining Days','Amount','Status','Reference'];
   const csv=[headers,...rows.map(r=>[r.guarantee_no,r.company,r.issuing_bank,r.beneficiary,GUAR_TYPE_LABEL[r.guarantee_type]||r.guarantee_type,String(r.issue_date).slice(0,10),String(r.current_expiry_date).slice(0,10),r.remaining_days,r.amount,guarStatusLabel(r.computed_status),r.reference_no||''])].map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');
@@ -4017,10 +4128,27 @@ function guaranteeExport(){
 }
 
 function guaranteePrint(){
+  if(G.guaranteeTab==='unconfirmed') return guaranteePrintUnconfirmed();
   const rows=G._guarantees||[];if(!rows.length)return toast('No guarantee records to print','error');
   const w=window.open('','_blank');if(!w)return toast('Please allow pop-ups to print the report','error');
   const tableRows=rows.map(r=>`<tr><td>${esc(r.guarantee_no)}</td><td>${esc(r.company)}</td><td>${esc(r.issuing_bank)}</td><td>${esc(r.beneficiary)}</td><td>${esc(GUAR_TYPE_LABEL[r.guarantee_type]||r.guarantee_type)}</td><td>${String(r.current_expiry_date).slice(0,10)}</td><td>${r.remaining_days}</td><td class="money">${Number(r.amount).toLocaleString('en-PK')}</td><td>${esc(guarStatusLabel(r.computed_status))}</td></tr>`).join('');
   w.document.write(`<!DOCTYPE html><html><head><title>Bank Guarantee Register</title><style>@page{size:A4 landscape;margin:9mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#111;font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}header{display:grid;grid-template-columns:35mm 1fr 35mm;align-items:center;border-bottom:2px solid #1089cc;padding-bottom:3mm;margin-bottom:4mm}header img{height:10mm;width:auto;max-width:20mm;object-fit:contain}h1{text-align:center;font-size:15pt;margin:0}.meta{text-align:right;font-size:7pt;color:#555}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #bbc3cd;padding:2mm 1.5mm;vertical-align:top;overflow-wrap:anywhere}th{background:#e8eef5;text-align:left}td.money{text-align:right}thead{display:table-header-group}tr{break-inside:avoid}footer{margin-top:4mm;color:#666;font-size:7pt}</style></head><body><header><img src="${location.origin}/ve-logo.png"><h1>Bank Guarantee Register</h1><div class="meta">Generated<br>${new Date().toLocaleDateString('en-GB')}</div></header><table><thead><tr><th>Guarantee no.</th><th>Company</th><th>Bank</th><th>Beneficiary</th><th>Type</th><th>Expiry</th><th>Days</th><th>Amount (PKR)</th><th>Status</th></tr></thead><tbody>${tableRows}</tbody></table><footer>${rows.length} record(s) · Filters applied from the portal register</footer></body></html>`);
+  w.onload=()=>setTimeout(()=>{w.focus();w.print()},350);w.document.close();
+}
+
+function guaranteeExportUnconfirmed(){
+  const rows=G._unconfirmedVisible||[];if(!rows.length)return toast('No unconfirmed records to export','error');
+  const headers=['Guarantee No','Company','Source Sheet','Source Row','Issuing Bank','Beneficiary','Source Status','Issue Date','Original Expiry','Effective Expiry','Amount','Review Issues','Review State'];
+  const csv=[headers,...rows.map(r=>[r.guarantee_no||'',r.company||'',r.source_sheet,r.source_row,r.selected_bank_name||r.issuing_bank||'',r.beneficiary||'',r.source_status||'',r.issue_date?String(r.issue_date).slice(0,10):'',r.original_expiry_date?String(r.original_expiry_date).slice(0,10):'',r.current_expiry_date?String(r.current_expiry_date).slice(0,10):'',r.amount??'',r.review_issues,r.review_state])].map(row=>row.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`unconfirmed-guarantees-${G.guaranteeUnconfirmedState}-${TODAY()}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function guaranteePrintUnconfirmed(){
+  const rows=G._unconfirmedVisible||[];if(!rows.length)return toast('No unconfirmed records to print','error');
+  const stateLabel=G.guaranteeUnconfirmedState==='unconfirmed'?'Needs Review':G.guaranteeUnconfirmedState[0].toUpperCase()+G.guaranteeUnconfirmedState.slice(1);
+  const tableRows=rows.map(r=>`<tr><td><strong>${esc(r.guarantee_no||'Missing number')}</strong><br><small>${esc(r.company||'Company unclear')}</small></td><td>${esc(r.source_sheet)}<br><small>Row ${r.source_row}</small></td><td>${esc(r.selected_bank_name||r.issuing_bank||'Bank unclear')}<br><small>${esc(r.beneficiary||'Beneficiary missing')}</small></td><td>${esc(r.source_status||guarStatusLabel(r.lifecycle_status))}</td><td>${fmtFull(r.issue_date)}</td><td>${fmtFull(r.current_expiry_date)}</td><td class="money">${r.amount==null?'—':Number(r.amount).toLocaleString('en-PK')}</td><td>${esc(r.review_issues)}</td></tr>`).join('');
+  const w=window.open('','_blank');if(!w)return toast('Please allow pop-ups to print the report','error');
+  w.document.write(`<!DOCTYPE html><html><head><title>Unconfirmed Guarantee Imports</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#111;font-size:7.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}header{display:grid;grid-template-columns:32mm 1fr 38mm;align-items:center;border-bottom:2px solid #1089cc;padding-bottom:3mm;margin-bottom:3mm}header img{height:10mm;width:auto;max-width:20mm;object-fit:contain}h1{text-align:center;font-size:14pt;margin:0}.meta{text-align:right;font-size:7pt;color:#555}.notice{padding:2.5mm 3mm;margin-bottom:3mm;background:#fff4d6;border:1px solid #e3bb67;color:#714d00}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #bbc3cd;padding:1.7mm 1.3mm;vertical-align:top;overflow-wrap:anywhere}th{background:#e8eef5;text-align:left}th:nth-child(1){width:17%}th:nth-child(2){width:11%}th:nth-child(3){width:18%}th:nth-child(4){width:10%}th:nth-child(5),th:nth-child(6){width:9%}th:nth-child(7){width:9%}th:nth-child(8){width:17%}td.money{text-align:right}small{color:#666}thead{display:table-header-group}tr{break-inside:avoid}footer{margin-top:3mm;color:#666;font-size:7pt}</style></head><body><header><img src="${location.origin}/ve-logo.png"><h1>Unconfirmed Guarantee Imports — ${esc(stateLabel)}</h1><div class="meta">Generated<br>${new Date().toLocaleDateString('en-GB')}</div></header><div class="notice">Review-only records. They are excluded from confirmed exposure, bank limits, expiry alerts and guarantee reports.</div><table><thead><tr><th>Guarantee / Company</th><th>Source</th><th>Bank / Beneficiary</th><th>Source status</th><th>Issue date</th><th>Effective expiry</th><th>Amount (PKR)</th><th>Review issue</th></tr></thead><tbody>${tableRows}</tbody></table><footer>${rows.length} ${esc(stateLabel.toLowerCase())} record(s)</footer></body></html>`);
   w.onload=()=>setTimeout(()=>{w.focus();w.print()},350);w.document.close();
 }
 

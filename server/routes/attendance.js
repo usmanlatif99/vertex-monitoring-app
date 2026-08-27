@@ -312,9 +312,19 @@ router.get('/admin/daily', auth, adminOnly, async (req, res) => {
        ORDER BY u.name`,
       [date]
     );
+    const { rows: autoCounts } = await db.query(
+      `SELECT user_id, COUNT(*)::int AS count
+       FROM attendance
+       WHERE auto_checked_out = TRUE
+         AND date_trunc('month', date) = date_trunc('month', $1::date)
+       GROUP BY user_id`,
+      [date]
+    );
+    const autoByUser = {};
+    autoCounts.forEach(r => { autoByUser[r.user_id] = r.count; });
     const recByUser = {};
     records.forEach(r => { recByUser[r.user_id] = r; });
-    res.json(users.map(u => ({ ...u, record: recByUser[u.id] || null })));
+    res.json(users.map(u => ({ ...u, record: recByUser[u.id] || null, auto_checkout_count: autoByUser[u.id] || 0 })));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
