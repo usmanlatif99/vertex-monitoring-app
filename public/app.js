@@ -2861,9 +2861,12 @@ function attCheckLocation(statusId, textId, todayRec) {
       if (checkoutBtn && inRange) { checkoutBtn.disabled = false; checkoutBtn.dataset.lat = pos.coords.latitude; checkoutBtn.dataset.lng = pos.coords.longitude; }
     },
     err => {
-      if (textEl) textEl.textContent = 'Location access denied — use manual check-in option below.';
+      const msg = err.code === 1 ? 'Location access denied — use manual check-in option below.'
+                : err.code === 2 ? 'Location unavailable — move to an open area and try again.'
+                : 'Location timed out — try again or use manual check-in below.';
+      if (textEl) textEl.textContent = msg;
     },
-    { timeout: 10000, maximumAge: 60000 }
+    { timeout: 15000, maximumAge: 60000 }
   );
 }
 
