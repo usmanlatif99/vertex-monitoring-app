@@ -2806,7 +2806,7 @@ async function renderAttendance() {
                   r.check_out_type === 'location'      ? 'GPS' :
                   r.check_out_type === 'out_of_office' ? 'Early leave' :
                   r.check_out_type === 'manual'        ? 'Manual' :
-                  r.check_out_type === 'webauthn'      ? '🔐 Biometric' :
+                  r.check_out_type === 'webauthn'      ? (r.approval_status === 'pending' ? '🔐 Biometric · Outside Office' : '🔐 Biometric') :
                   r.check_out_type === 'auto'          ? 'Auto' : r.check_out_type
                 ) : ''}</td>
                 <td class="muted small">${esc(r.checkout_remark || r.admin_note || '')}</td>
@@ -3287,7 +3287,7 @@ async function renderAttAdminDaily() {
                 r.record.check_in_type === 'location' ? 'GPS' :
                 r.record.check_in_type === 'manual'   ? 'Manual' :
                 esc(r.record.check_in_type || '')
-              ) : '—'}</td>
+              ) : '—'}${r.record?.check_out_type === 'webauthn' && r.record?.approval_status === 'pending' ? ' <span class="att-outside-label">Out</span>' : ''}</td>
               <td>
                 <button class="btn btn-ghost btn-sm" onclick="attAdminMarkModal(${r.id},'${esc(r.name)}','${date}',${r.record ? r.record.id : 'null'})">
                   ${r.record ? 'Edit' : 'Mark'}
@@ -3470,7 +3470,7 @@ async function renderAttAdminPending() {
             <div class="att-pend-item-label">
               <span style="color:var(--green);font-size:13px">✓ Check-In</span>
               <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_in_at)}</span>
-              <span class="muted small" style="margin-left:6px">· GPS verified</span>
+              <span class="muted small" style="margin-left:6px">· ${r.check_in_type === 'webauthn' ? 'Biometric verified' : 'GPS verified'}</span>
             </div>
           </div>`}
           ${r.check_out_at ? `
@@ -3480,7 +3480,7 @@ async function renderAttAdminPending() {
                 ? `<span class="att-badge att-pending" style="font-size:11px">Check-Out</span>`
                 : `<span style="color:var(--green);font-size:13px">✓ Check-Out</span>`}
               <span style="margin-left:8px;font-weight:500">${attFmtTime(r.check_out_at)}</span>
-              <span class="muted small" style="margin-left:6px">· ${r.check_out_type === 'out_of_office' ? 'Early leave / remote' : r.check_out_type === 'manual' ? 'Manual request' : 'GPS verified'}</span>
+              <span class="muted small" style="margin-left:6px">· ${r.check_out_type === 'out_of_office' ? 'Early leave / remote' : r.check_out_type === 'manual' ? 'Manual request' : r.check_out_type === 'webauthn' ? (r.approval_status === 'pending' ? '🔐 Biometric · Outside Office' : 'Biometric verified') : 'GPS verified'}</span>
             </div>
             ${hasCheckoutPending ? `<div class="att-pend-reason">${r.checkout_remark ? `"${esc(r.checkout_remark)}"` : '<span class="muted" style="font-style:normal">No reason provided</span>'}</div>` : ''}
           </div>` : `

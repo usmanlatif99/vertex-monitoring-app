@@ -490,6 +490,12 @@ tr.att-penalty-row:hover { background:#fce7f3; }
   border-radius:4px; padding:1px 5px; margin-left:4px; vertical-align:middle;
 }
 
+.att-outside-label {
+  display:inline-block; font-size:10px; font-weight:700;
+  background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;
+  border-radius:4px; padding:1px 5px; margin-left:4px; vertical-align:middle;
+}
+
 /* Admin daily summary */
 .att-daily-summary { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
 .att-company-block { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
