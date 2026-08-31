@@ -233,7 +233,9 @@ router.post('/checkout', auth, async (req, res) => {
       if (lat != null && lng != null) {
         distance = haversineM(OFFICE_LAT, OFFICE_LNG, parseFloat(lat), parseFloat(lng));
         if (distance > ALLOWED_M) {
-          // Out-of-office WebAuthn checkout — still allowed but flag for review
+          if (!remark || !remark.trim()) {
+            return res.status(400).json({ error: 'A reason is required when checking out from outside the office' });
+          }
           approvalStatus = 'pending';
         }
       }

@@ -2656,16 +2656,23 @@ async function renderAttendance() {
               : `<button class="btn btn-sm" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">Check Out</button>
                  <button class="btn btn-ghost btn-sm" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>`}
           </div>
-          ${!hasApprovedDevice ? `<div id="att-ooo-form" style="display:none;margin-top:12px">
-            <div class="fld">
-              <label>Reason for early leave or remote checkout (required)</label>
-              <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
-              <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
-            </div>
-          </div>` : ''}
+          ${hasApprovedDevice
+            ? `<div id="att-outside-reason-wrap" style="display:none;margin-top:12px">
+                <div class="fld">
+                  <label>You are outside the office — reason required before checking out <span id="att-outside-remark-count" class="muted small" style="font-weight:400">(0/10 chars)</span></label>
+                  <textarea id="att-outside-remark" rows="2" placeholder="e.g. Working from client site, doctor's appointment…" oninput="attCheckOutsideRemark()"></textarea>
+                </div>
+              </div>`
+            : `<div id="att-ooo-form" style="display:none;margin-top:12px">
+                <div class="fld">
+                  <label>Reason for early leave or remote checkout (required)</label>
+                  <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
+                  <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
+                </div>
+              </div>`}
         </div>
       </div>`;
   } else if (todayRec.check_in_at && !todayRec.check_out_at) {
@@ -2691,16 +2698,23 @@ async function renderAttendance() {
             : `<button class="btn" style="background:var(--red);color:#fff" id="att-checkout-btn" disabled onclick="attDoCheckout('location')">Check Out</button>
                <button class="btn btn-ghost" onclick="attShowOooForm()">Early Leave / Remote Check-Out</button>`}
         </div>
-        ${!hasApprovedDevice ? `<div id="att-ooo-form" style="display:none;margin-top:14px">
-          <div class="fld">
-            <label>Reason for early leave or remote checkout (required)</label>
-            <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:8px">
-            <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
-            <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
-          </div>
-        </div>` : ''}
+        ${hasApprovedDevice
+          ? `<div id="att-outside-reason-wrap" style="display:none;margin-top:14px">
+              <div class="fld">
+                <label>You are outside the office — reason required before checking out <span id="att-outside-remark-count" class="muted small" style="font-weight:400">(0/10 chars)</span></label>
+                <textarea id="att-outside-remark" rows="2" placeholder="e.g. Working from client site, doctor's appointment…" oninput="attCheckOutsideRemark()"></textarea>
+              </div>
+            </div>`
+          : `<div id="att-ooo-form" style="display:none;margin-top:14px">
+              <div class="fld">
+                <label>Reason for early leave or remote checkout (required)</label>
+                <textarea id="att-ooo-remark" rows="2" placeholder="e.g. Left early for doctor appointment, working remotely"></textarea>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn btn-sm" style="background:var(--red);color:#fff" onclick="attDoCheckout('out_of_office')">Submit</button>
+                <button class="btn btn-ghost btn-sm" onclick="attHideOooForm()">Cancel</button>
+              </div>
+            </div>`}
       </div>`;
   } else if (todayRec.check_out_at) {
     const outPending = todayRec.approval_status === 'pending';
@@ -2818,6 +2832,7 @@ async function renderAttendance() {
 
   // Start location check
   attCheckLocation('att-loc-status', 'att-loc-text', todayRec);
+  if (hasApprovedDevice && todayRec?.check_in_at && !todayRec?.check_out_at) attCheckBiometricOutside();
 
   // Live duration counter when checked in
   if (todayRec?.check_in_at && !todayRec.check_out_at) {
@@ -2870,6 +2885,31 @@ function attCheckLocation(statusId, textId, todayRec) {
   );
 }
 
+function attCheckBiometricOutside() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const dist = attHaversineM(ATT_OFFICE_LAT, ATT_OFFICE_LNG, pos.coords.latitude, pos.coords.longitude);
+      if (dist > ATT_ALLOWED_M) {
+        const wrap = document.getElementById('att-outside-reason-wrap');
+        const btn  = document.getElementById('att-checkout-btn');
+        if (wrap) wrap.style.display = 'block';
+        if (btn)  btn.disabled = true;
+      }
+    },
+    () => {} // GPS unavailable → allow checkout without reason
+  , { timeout: 15000, maximumAge: 60000 });
+}
+
+function attCheckOutsideRemark() {
+  const remarkEl = document.getElementById('att-outside-remark');
+  const btn      = document.getElementById('att-checkout-btn');
+  const counter  = document.getElementById('att-outside-remark-count');
+  const len = remarkEl?.value.trim().length || 0;
+  if (counter) counter.textContent = `(${len}/10 chars)`;
+  if (btn) btn.disabled = len < 10;
+}
+
 function attShowManualCheckin() {
   document.getElementById('att-manual-form').style.display = 'block';
 }
@@ -2913,7 +2953,7 @@ async function attDoCheckout(type) {
     payload.lng = parseFloat(btn.dataset.lng);
   } else {
     const remark = document.getElementById('att-ooo-remark')?.value.trim();
-    if (!remark) { toast('Please enter a reason for out-of-office checkout', 'error'); return; }
+    if (!remark || remark.length < 10) { toast('Please enter a reason (at least 10 characters)', 'error'); return; }
     payload.remark = remark;
   }
   try {
@@ -3005,12 +3045,21 @@ async function attWebAuthnCheckout() {
   const btn = document.getElementById('att-checkout-btn');
   if (btn) btn.disabled = true;
   try {
+    const outsideWrap = document.getElementById('att-outside-reason-wrap');
+    const outsideRemark = document.getElementById('att-outside-remark')?.value.trim() || '';
+    if (outsideWrap && outsideWrap.style.display !== 'none' && outsideRemark.length < 10) {
+      toast('Please enter a reason (at least 10 characters)', 'error');
+      if (btn) btn.disabled = false;
+      return;
+    }
     const opts = await api('POST', '/webauthn/auth/options', { action: 'checkout' });
     attDecodeOptions(opts);
     const cred = await navigator.credentials.get({ publicKey: opts });
     let gps = {};
     try { gps = await attGetGPS(); } catch (_) {}
-    await api('POST', '/attendance/checkout', { assertion: attEncodeCredential(cred), ...gps });
+    const coPayload = { assertion: attEncodeCredential(cred), ...gps };
+    if (outsideRemark) coPayload.remark = outsideRemark;
+    await api('POST', '/attendance/checkout', coPayload);
     toast('Checked out successfully ✓', 'success');
     renderView();
   } catch (ex) {
