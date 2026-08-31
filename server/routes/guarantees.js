@@ -8,7 +8,7 @@ const db = require('../db');
 const auth = require('../middleware/auth');
 
 const ACCESS_RANK = { none: 0, viewer: 1, editor: 2, administrator: 3 };
-const ACTIVE_STATUSES = new Set(['active', 'returned', 'released', 'encashed', 'cancelled']);
+const ACTIVE_STATUSES = new Set(['active', 'returned', 'encashed', 'cancelled']);
 const GUARANTEE_TYPES = new Set(['bid', 'performance', 'advance_payment', 'retention', 'customs', 'other']);
 const COMPANIES = new Set(['VTX', 'VSN', 'ALL']);
 
@@ -83,6 +83,24 @@ function cleanText(value, max = 1000) {
 
 function validDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
+}
+
+function optionalDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (!validDate(value)) throw new Error('Invalid date in unconfirmed record');
+  return value;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new Error('Invalid number in unconfirmed record');
+  return number;
+}
+
+function normalizedLifecycle(value) {
+  const status = cleanText(value, 20) || 'active';
+  return status === 'released' ? 'returned' : status;
 }
 
 function parseGuarantee(body, partial = false) {
@@ -210,7 +228,7 @@ router.get('/summary', viewAccess, async (_req, res) => {
         COUNT(*) FILTER (WHERE lifecycle_status='active')::int AS active_count,
         COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7)::int AS expiring_count,
         COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date < CURRENT_DATE)::int AS expired_count,
-        COUNT(*) FILTER (WHERE lifecycle_status IN ('returned','released') AND date_trunc('month', returned_date)=date_trunc('month', CURRENT_DATE))::int AS returned_month_count,
+        COUNT(*) FILTER (WHERE lifecycle_status='returned' AND date_trunc('month', returned_date)=date_trunc('month', CURRENT_DATE))::int AS returned_month_count,
         COALESCE(SUM(amount) FILTER (WHERE lifecycle_status='active'),0) AS active_exposure
       FROM bank_guarantees WHERE deleted_at IS NULL`);
     res.json(rows[0]);
@@ -272,6 +290,145 @@ router.get('/history', viewAccess, async (_req, res) => {
     console.error('[guarantee history]', e);
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+router.get('/unconfirmed', adminAccess, async (req, res) => {
+  const state = ['unconfirmed','confirmed','excluded'].includes(req.query.state) ? req.query.state : 'unconfirmed';
+  try {
+    const { rows } = await db.query(
+      `SELECT q.*, b.name AS selected_bank_name, u.name AS reviewed_by_name
+       FROM guarantee_unconfirmed_imports q
+       LEFT JOIN guarantee_banks b ON b.id=q.bank_id
+       LEFT JOIN users u ON u.id=q.reviewed_by
+       WHERE q.review_state=$1
+       ORDER BY CASE WHEN q.lifecycle_status='active' THEN 0 ELSE 1 END, q.source_sheet, q.source_row`,
+      [state]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error('[unconfirmed guarantees]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/unconfirmed/import', adminAccess, async (req, res) => {
+  const records = Array.isArray(req.body.records) ? req.body.records : [];
+  if (!records.length || records.length > 500) return res.status(400).json({ error: 'Provide between 1 and 500 records' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    let imported = 0;
+    for (const record of records) {
+      const sourceSheet = cleanText(record.source_sheet, 120);
+      const sourceRow = Number(record.source_row);
+      const issues = cleanText(record.review_issues, 5000);
+      if (!sourceSheet || !Number.isInteger(sourceRow) || sourceRow < 1 || !issues) throw new Error('Source sheet, row and review issues are required');
+      const lifecycle = normalizedLifecycle(record.lifecycle_status);
+      const values = [
+        sourceSheet, sourceRow, cleanText(record.guarantee_no,120), cleanText(record.company,10),
+        cleanText(record.issuing_bank,150), record.bank_id ? Number(record.bank_id) : null,
+        cleanText(record.beneficiary,250), cleanText(record.guarantee_type,40),
+        optionalDate(record.issue_date), optionalDate(record.original_expiry_date), optionalDate(record.current_expiry_date),
+        optionalNumber(record.amount), optionalNumber(record.cash_margin_percent), cleanText(record.reference_no,300),
+        cleanText(record.description,5000), cleanText(record.source_status,80), lifecycle,
+        optionalDate(record.returned_date), cleanText(record.remarks,5000), issues, JSON.stringify(record.raw_data || record),
+      ];
+      await client.query(
+        `INSERT INTO guarantee_unconfirmed_imports
+         (source_sheet,source_row,guarantee_no,company,issuing_bank,bank_id,beneficiary,guarantee_type,
+          issue_date,original_expiry_date,current_expiry_date,amount,cash_margin_percent,reference_no,
+          description,source_status,lifecycle_status,returned_date,remarks,review_issues,raw_data)
+         VALUES (${values.map((_, index) => `$${index + 1}`).join(',')})
+         ON CONFLICT (source_sheet,source_row) DO UPDATE SET
+          guarantee_no=EXCLUDED.guarantee_no, company=EXCLUDED.company, issuing_bank=EXCLUDED.issuing_bank,
+          bank_id=EXCLUDED.bank_id, beneficiary=EXCLUDED.beneficiary, guarantee_type=EXCLUDED.guarantee_type,
+          issue_date=EXCLUDED.issue_date, original_expiry_date=EXCLUDED.original_expiry_date,
+          current_expiry_date=EXCLUDED.current_expiry_date, amount=EXCLUDED.amount,
+          cash_margin_percent=EXCLUDED.cash_margin_percent, reference_no=EXCLUDED.reference_no,
+          description=EXCLUDED.description, source_status=EXCLUDED.source_status,
+          lifecycle_status=EXCLUDED.lifecycle_status, returned_date=EXCLUDED.returned_date,
+          remarks=EXCLUDED.remarks, review_issues=EXCLUDED.review_issues, raw_data=EXCLUDED.raw_data,
+          updated_at=NOW()
+         WHERE guarantee_unconfirmed_imports.review_state='unconfirmed'`, values
+      );
+      imported++;
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ imported });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[unconfirmed import]', e);
+    res.status(400).json({ error: e.message || 'Import failed' });
+  } finally { client.release(); }
+});
+
+router.put('/unconfirmed/:id', adminAccess, async (req, res) => {
+  try {
+    const lifecycle = normalizedLifecycle(req.body.lifecycle_status);
+    const { rows } = await db.query(
+      `UPDATE guarantee_unconfirmed_imports SET
+       guarantee_no=$1, company=$2, bank_id=$3, beneficiary=$4, guarantee_type=$5,
+       issue_date=$6, original_expiry_date=$7, current_expiry_date=$8, amount=$9,
+       cash_margin_percent=$10, reference_no=$11, description=$12, lifecycle_status=$13,
+       returned_date=$14, remarks=$15, admin_note=$16, reviewed_by=$17, reviewed_at=NOW(), updated_at=NOW()
+       WHERE id=$18 AND review_state='unconfirmed' RETURNING *`,
+      [cleanText(req.body.guarantee_no,120),cleanText(req.body.company,10),req.body.bank_id?Number(req.body.bank_id):null,
+       cleanText(req.body.beneficiary,250),cleanText(req.body.guarantee_type,40),optionalDate(req.body.issue_date),
+       optionalDate(req.body.original_expiry_date),optionalDate(req.body.current_expiry_date),optionalNumber(req.body.amount),
+       optionalNumber(req.body.cash_margin_percent),cleanText(req.body.reference_no,300),cleanText(req.body.description,5000),
+       lifecycle,optionalDate(req.body.returned_date),cleanText(req.body.remarks,5000),cleanText(req.body.admin_note,5000),
+       req.user.id,req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Unconfirmed record not found' });
+    res.json(rows[0]);
+  } catch (e) { res.status(400).json({ error: e.message || 'Unable to save record' }); }
+});
+
+router.post('/unconfirmed/:id/confirm', adminAccess, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const source = (await client.query(
+      `SELECT * FROM guarantee_unconfirmed_imports WHERE id=$1 AND review_state='unconfirmed' FOR UPDATE`,
+      [req.params.id]
+    )).rows[0];
+    if (!source) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Unconfirmed record not found' }); }
+    const data = parseGuarantee({ ...source, lifecycle_status: normalizedLifecycle(source.lifecycle_status) });
+    const bank = await resolveBank(client, data.bank_id);
+    const { rows } = await client.query(
+      `INSERT INTO bank_guarantees
+       (company,guarantee_no,issuing_bank,bank_id,bank_branch,beneficiary,guarantee_type,
+        issue_date,original_expiry_date,current_expiry_date,amount,cash_margin_percent,cash_margin_amount,
+        reference_no,description,lifecycle_status,returned_date,responsible_user_id,remarks,created_by,updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$20) RETURNING *`,
+      [data.company,data.guarantee_no,bank.name,bank.id,data.bank_branch,data.beneficiary,data.guarantee_type,
+       data.issue_date,data.original_expiry_date,data.current_expiry_date,data.amount,data.cash_margin_percent,
+       data.cash_margin_amount,data.reference_no,data.description,data.lifecycle_status,data.returned_date,
+       data.responsible_user_id,data.remarks,req.user.id]
+    );
+    await audit(client, rows[0].id, 'confirmed_from_import', req.user.id, null, rows[0]);
+    await client.query(
+      `UPDATE guarantee_unconfirmed_imports SET review_state='confirmed',confirmed_guarantee_id=$1,
+       reviewed_by=$2,reviewed_at=NOW(),updated_at=NOW() WHERE id=$3`,
+      [rows[0].id,req.user.id,source.id]
+    );
+    await client.query('COMMIT');
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    if (e.code === '23505') return res.status(409).json({ error: 'This bank and guarantee number already exist' });
+    res.status(400).json({ error: e.message || 'Confirmation failed' });
+  } finally { client.release(); }
+});
+
+router.post('/unconfirmed/:id/exclude', adminAccess, async (req, res) => {
+  const { rows } = await db.query(
+    `UPDATE guarantee_unconfirmed_imports SET review_state='excluded',admin_note=$1,reviewed_by=$2,
+     reviewed_at=NOW(),updated_at=NOW() WHERE id=$3 AND review_state='unconfirmed' RETURNING *`,
+    [cleanText(req.body.admin_note,5000),req.user.id,req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: 'Unconfirmed record not found' });
+  res.json(rows[0]);
 });
 
 router.put('/limits', adminAccess, async (req, res) => {
@@ -457,7 +614,7 @@ router.post('/:id/extensions', editAccess, async (req, res) => {
 
 router.post('/:id/close', editAccess, async (req, res) => {
   const status = cleanText(req.body.status, 20);
-  if (!['returned','released','encashed','cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid closing status' });
+  if (!['returned','encashed','cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid closing status' });
   const date = req.body.returned_date || new Date().toISOString().slice(0,10);
   if (!validDate(date)) return res.status(400).json({ error: 'Valid closing date is required' });
   const client = await db.connect();
