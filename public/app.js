@@ -3905,13 +3905,15 @@ function guaranteeQuery() {
   return q.toString();
 }
 
-async function renderGuaranteeRegister() {
+async function renderGuaranteeRegister(searchRequestId = null, caretPosition = null) {
   const body = document.getElementById('guarantee-body');
   const [summary, rows, banks] = await Promise.all([
     api('GET', '/guarantees/summary'),
     api('GET', `/guarantees?${guaranteeQuery()}`),
     api('GET', '/guarantees/banks'),
   ]);
+  if (!body?.isConnected || G.view !== 'guarantees' || G.guaranteeTab !== 'register') return;
+  if (searchRequestId !== null && searchRequestId !== G._guarSearchRequest) return;
   G._guarantees = rows || [];
   body.innerHTML = `
     <div class="guar-metrics">
@@ -3921,7 +3923,7 @@ async function renderGuaranteeRegister() {
       <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Returned guarantees</small></div>
     </div>
     <div class="filter-bar guar-filter-bar">
-      <div class="search-wrap">${SEARCH_ICON}<input class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeFilter('search',this.value)"></div>
+      <div class="search-wrap">${SEARCH_ICON}<input id="guarantee-search" class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeSearchInput(this)"></div>
       <select onchange="guaranteeFilter('bank',this.value)"><option value="">All banks</option>${banks.map(b=>`<option value="${esc(b.name)}" ${G.gf.bank===b.name?'selected':''}>${esc(b.name)}</option>`).join('')}</select>
       <select onchange="guaranteeFilter('company',this.value)"><option value="">All companies</option><option value="VTX" ${G.gf.company==='VTX'?'selected':''}>Vertex</option><option value="VSN" ${G.gf.company==='VSN'?'selected':''}>Vision</option><option value="ALL" ${G.gf.company==='ALL'?'selected':''}>Both</option></select>
       <select onchange="guaranteeFilter('status',this.value)"><option value="">All statuses</option>${['active','expiring_soon','expired','returned','encashed','cancelled'].map(s=>`<option value="${s}" ${G.gf.status===s?'selected':''}>${guarStatusLabel(s)}</option>`).join('')}</select>
@@ -3937,6 +3939,23 @@ async function renderGuaranteeRegister() {
         <td class="guar-days">${r.remaining_days}</td><td class="right">${guarMoney(r.amount)}</td><td>${guarStatusBadge(r.computed_status)}</td>
       </tr>`).join('') : '<tr><td colspan="9"><div class="empty">No guarantees match these filters.</div></td></tr>'}</tbody>
     </table></div>`;
+  if (searchRequestId !== null) {
+    const search = document.getElementById('guarantee-search');
+    if (search) {
+      const caret = Math.min(caretPosition ?? search.value.length, search.value.length);
+      search.focus({ preventScroll: true });
+      search.setSelectionRange(caret, caret);
+    }
+  }
+}
+
+function guaranteeSearchInput(input) {
+  G.gf.search = input.value;
+  const caret = input.selectionStart ?? input.value.length;
+  const requestId = (G._guarSearchRequest || 0) + 1;
+  G._guarSearchRequest = requestId;
+  clearTimeout(G._guarFilterTimer);
+  G._guarFilterTimer = setTimeout(() => renderGuaranteeRegister(requestId, caret), 300);
 }
 
 function guaranteeFilter(key, value) {
