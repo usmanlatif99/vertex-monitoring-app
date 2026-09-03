@@ -674,6 +674,11 @@ router.post('/:id/reopen', adminAccess, async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Guarantee is already active' });
     }
+    const expiryDate = dateOnly(old.current_expiry_date);
+    if (expiryDate && expiryDate < todayPKT()) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Extend the effective expiry date before reopening this guarantee as Active' });
+    }
     const { rows } = await client.query(
       `UPDATE bank_guarantees
        SET lifecycle_status='active', returned_date=NULL, updated_by=$1, updated_at=NOW()

@@ -4182,14 +4182,16 @@ async function showGuaranteeStatusForm(id){
   const r=G._guaranteeDetail?.id===id?G._guaranteeDetail:await api('GET',`/guarantees/${id}`);
   G._guaranteeStatusRecord=r;
   const issueDate=String(r.issue_date).slice(0,10);
+  const expiryPassed=String(r.current_expiry_date).slice(0,10)<TODAY();
+  const activeOption=r.lifecycle_status!=='active'&&!expiryPassed?'<option value="active">Active</option>':'';
   closeGuaranteeModal();
-  guaranteeModal(`<div class="guar-modal-head"><div><h2>Change guarantee status</h2><div class="sub">${esc(r.guarantee_no)} · Current status: ${esc(guarStatusLabel(r.lifecycle_status))}</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>Change guarantee status</h2><div class="sub">${esc(r.guarantee_no)} · Current status: ${esc(guarStatusLabel(r.computed_status))}</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
     <form onsubmit="submitGuaranteeStatus(event,${r.id},'${esc(r.lifecycle_status)}')">
-      <div class="fld"><label>New status *</label><select id="gs-status" required onchange="guaranteeStatusFields()"><option value="">Select status</option><option value="active">Active</option><option value="returned">Returned</option><option value="encashed">Encashed</option><option value="cancelled">Cancelled</option></select></div>
+      <div class="fld"><label>New status *</label><select id="gs-status" required onchange="guaranteeStatusFields()"><option value="">Select status</option>${activeOption}<option value="returned">Returned</option><option value="encashed">Encashed</option><option value="cancelled">Cancelled</option></select></div>
       <div class="guar-detail-grid"><div><span>Issue date</span><strong>${fmtFull(r.issue_date)}</strong></div><div><span>Effective expiry</span><strong>${fmtFull(r.current_expiry_date)}</strong></div></div>
       <div class="fld" id="gs-date-wrap" style="display:none"><label id="gs-date-label">Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" min="${issueDate}" max="${TODAY()}" onchange="guaranteeStatusFields()"></div>
       <div class="fld"><label id="gs-reason-label">Remarks / reason *</label><textarea id="gs-reason" rows="4" maxlength="5000" required placeholder="Explain why this status is being changed"></textarea></div>
-      <div class="guar-note" id="gs-notice"><strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p></div>
+      <div class="guar-note" id="gs-notice">${expiryPassed?'<strong>Effective expiry has passed.</strong><p>Use Extend to enter a valid future expiry date before reopening this guarantee as Active.</p>':'<strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p>'}</div>
       <div class="guar-form-actions"><button type="button" class="btn btn-ghost" onclick="closeGuaranteeModal()">Cancel</button><button class="btn btn-amber">Confirm status change</button></div>
     </form>`);
 }
@@ -4209,8 +4211,11 @@ function guaranteeStatusFields(){
   if(dateLabel)dateLabel.textContent=dateLabels[status]||'Closing date *';
   if(notice){
     const expiry=String(G._guaranteeStatusRecord?.current_expiry_date||'').slice(0,10);
+    const expiryPassed=expiry&&expiry<TODAY();
     const early=status==='returned'&&date?.value&&expiry&&date.value<expiry;
-    notice.innerHTML=early
+    notice.innerHTML=expiryPassed
+      ? '<strong>Effective expiry has passed.</strong><p>Use Extend to enter a valid future expiry date before reopening this guarantee as Active.</p>'
+      : early
       ? '<strong>Early return warning</strong><p>This guarantee is being returned before its effective expiry date. Confirm only if the physical guarantee has actually been returned or released by the bank.</p>'
       : '<strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p>';
   }
