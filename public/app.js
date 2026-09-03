@@ -3832,6 +3832,15 @@ function guaranteeCan(level) {
   return GUAR_ACCESS_RANK[guaranteeAccess()] >= GUAR_ACCESS_RANK[level];
 }
 
+function guaranteeAuditNote(entry) {
+  let data = entry?.new_data;
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (_) { data = null; }
+  }
+  const note = data?.reopening_reason || ((['returned','encashed','cancelled'].includes(entry?.action)) ? data?.remarks : null);
+  return note ? `<small class="muted">Reason: ${esc(note)}</small>` : '';
+}
+
 function guarMoney(value) {
   return `PKR ${Number(value || 0).toLocaleString('en-PK', { maximumFractionDigits: 0 })}`;
 }
@@ -4153,13 +4162,13 @@ async function submitGuarantee(e,id) {
 async function showGuaranteeDetail(id) {
   const r=await api('GET',`/guarantees/${id}`); G._guaranteeDetail=r;
   const docs=(r.documents||[]).map(d=>`<div class="guar-doc"><a href="#" onclick="guaranteeDownload(event,${d.id})">${esc(d.original_name)}</a><span>${Math.round(d.file_size/1024)} KB · ${esc(d.uploaded_by_name)}</span>${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="deleteGuaranteeDocument(${d.id},${r.id})">Delete</button>`:''}</div>`).join('')||'<div class="muted small">No documents uploaded.</div>';
-  guaranteeModal(`<div class="guar-modal-head"><div><h2>${esc(r.guarantee_no)}</h2><div class="sub">${esc(r.issuing_bank)} · ${esc(r.beneficiary)}</div></div><div class="guar-actions">${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal();showGuaranteeForm(${r.id})">Edit</button><button class="btn btn-ghost btn-sm" onclick="guaranteeExtend(${r.id})">Extend</button>${r.lifecycle_status==='active'?`<button class="btn btn-ghost btn-sm" onclick="guaranteeClose(${r.id})">Close</button>`:''}`:''}${guaranteeCan('administrator')?`<button class="btn btn-danger btn-sm" onclick="deleteGuarantee(${r.id})">Delete</button>`:''}<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">×</button></div></div>
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>${esc(r.guarantee_no)}</h2><div class="sub">${esc(r.issuing_bank)} · ${esc(r.beneficiary)}</div></div><div class="guar-actions">${guaranteeCan('editor')?`<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal();showGuaranteeForm(${r.id})">Edit</button><button class="btn btn-ghost btn-sm" onclick="guaranteeExtend(${r.id})">Extend</button>`:''}${guaranteeCan('administrator')?`<button class="btn btn-ghost btn-sm" onclick="showGuaranteeStatusForm(${r.id})">Change status</button><button class="btn btn-danger btn-sm" onclick="deleteGuarantee(${r.id})">Delete</button>`:''}<button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">×</button></div></div>
     <div class="guar-detail-top">${guarStatusBadge(r.computed_status)}<strong>${guarMoney(r.amount)}</strong><span>${r.remaining_days} day(s)</span></div>
     <div class="guar-detail-grid">${[['Company',r.company],['Type',GUAR_TYPE_LABEL[r.guarantee_type]],['Issue date',fmtFull(r.issue_date)],['Original expiry',fmtFull(r.original_expiry_date)],['Effective expiry',fmtFull(r.current_expiry_date)],['Reference',r.reference_no||'—'],['Responsible',r.responsible_name||'—'],['Cash margin',r.cash_margin_percent?`${r.cash_margin_percent}%`:'—']].map(([l,v])=>`<div><span>${l}</span><strong>${esc(v)}</strong></div>`).join('')}</div>
     ${r.description?`<div class="guar-note"><strong>Description</strong><p>${esc(r.description)}</p></div>`:''}${r.remarks?`<div class="guar-note"><strong>Remarks</strong><p>${esc(r.remarks)}</p></div>`:''}
     <div class="guar-detail-section"><div class="guar-section-head"><h3>Documents</h3>${guaranteeCan('editor')?`<label class="btn btn-ghost btn-sm">Upload<input type="file" hidden onchange="uploadGuaranteeDocument(${r.id},this)"></label>`:''}</div>${docs}</div>
     <div class="guar-detail-section"><h3>Extension history</h3>${r.extensions?.length?`<div class="table-wrap"><table class="guar-table"><thead><tr><th>Previous</th><th>New</th><th>Amendment</th><th>Updated by</th></tr></thead><tbody>${r.extensions.map(x=>`<tr><td>${fmtFull(x.previous_expiry_date)}</td><td>${fmtFull(x.new_expiry_date)}</td><td>${esc(x.amendment_no||'—')}</td><td>${esc(x.created_by_name)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted small">No extensions recorded.</div>'}</div>
-    <div class="guar-detail-section"><h3>Audit trail</h3><div class="guar-audit">${(r.audit||[]).map(a=>`<div><strong>${esc(a.action)}</strong><span>${esc(a.changed_by_name)} · ${fmtDateTime(a.created_at)}</span></div>`).join('')}</div></div>`,true);
+    <div class="guar-detail-section"><h3>Audit trail</h3><div class="guar-audit">${(r.audit||[]).map(a=>`<div><strong>${esc(a.action)}</strong><span>${esc(a.changed_by_name)} · ${fmtDateTime(a.created_at)}</span>${guaranteeAuditNote(a)}</div>`).join('')}</div></div>`,true);
 }
 
 async function guaranteeExtend(id){
@@ -4169,10 +4178,44 @@ async function guaranteeExtend(id){
 
 async function submitGuaranteeExtension(e,id){e.preventDefault();try{await api('POST',`/guarantees/${id}/extensions`,{new_expiry_date:document.getElementById('ge-date').value,amendment_no:document.getElementById('ge-amendment').value,remarks:document.getElementById('ge-remarks').value});toast('Extension recorded','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}}
 
-async function guaranteeClose(id){
-  const status=prompt('Enter closing status: returned, encashed, or cancelled','returned'); if(!status)return;
-  const remarks=prompt('Closing remarks (optional)','')||'';
-  try{await api('POST',`/guarantees/${id}/close`,{status:status.toLowerCase(),returned_date:TODAY(),remarks});toast('Guarantee closed','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}
+async function showGuaranteeStatusForm(id){
+  const r=G._guaranteeDetail?.id===id?G._guaranteeDetail:await api('GET',`/guarantees/${id}`);
+  closeGuaranteeModal();
+  guaranteeModal(`<div class="guar-modal-head"><div><h2>Change guarantee status</h2><div class="sub">${esc(r.guarantee_no)} · Current status: ${esc(guarStatusLabel(r.lifecycle_status))}</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
+    <form onsubmit="submitGuaranteeStatus(event,${r.id},'${esc(r.lifecycle_status)}')">
+      <div class="fld"><label>New status *</label><select id="gs-status" required onchange="guaranteeStatusFields()"><option value="">Select status</option><option value="active">Active</option><option value="returned">Returned</option><option value="encashed">Encashed</option><option value="cancelled">Cancelled</option></select></div>
+      <div class="fld" id="gs-date-wrap"><label>Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" max="${TODAY()}" required></div>
+      <div class="fld"><label id="gs-reason-label">Remarks / reason *</label><textarea id="gs-reason" rows="4" maxlength="5000" required placeholder="Explain why this status is being changed"></textarea></div>
+      <div class="guar-note" id="gs-notice"><strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p></div>
+      <div class="guar-form-actions"><button type="button" class="btn btn-ghost" onclick="closeGuaranteeModal()">Cancel</button><button class="btn btn-amber">Confirm status change</button></div>
+    </form>`);
+}
+
+function guaranteeStatusFields(){
+  const reopening=document.getElementById('gs-status')?.value==='active';
+  const dateWrap=document.getElementById('gs-date-wrap');
+  const date=document.getElementById('gs-date');
+  const label=document.getElementById('gs-reason-label');
+  if(dateWrap)dateWrap.style.display=reopening?'none':'';
+  if(date)date.required=!reopening;
+  if(label)label.textContent=reopening?'Reopening reason *':'Closing remarks *';
+}
+
+async function submitGuaranteeStatus(e,id,currentStatus){
+  e.preventDefault();
+  const status=document.getElementById('gs-status').value;
+  const reason=document.getElementById('gs-reason').value.trim();
+  const closingDate=document.getElementById('gs-date').value;
+  if(status===currentStatus)return toast(`Guarantee is already ${guarStatusLabel(currentStatus)}`,'error');
+  if(currentStatus!=='active'&&status!=='active')return toast('Reopen the guarantee to Active before selecting another closing status','error');
+  const action=status==='active'?'reopen this guarantee as Active':`close this guarantee as ${guarStatusLabel(status)}`;
+  if(!confirm(`Confirm that you want to ${action}?`))return;
+  try{
+    if(status==='active')await api('POST',`/guarantees/${id}/reopen`,{reason});
+    else await api('POST',`/guarantees/${id}/close`,{status,returned_date:closingDate,remarks:reason});
+    toast(status==='active'?'Guarantee reopened as Active':'Guarantee status updated','success');
+    closeGuaranteeModal();renderGuaranteeRegister();
+  }catch(ex){toast(ex.message,'error');}
 }
 
 async function deleteGuarantee(id){if(!confirm('Delete this guarantee from the active register? The audit history will be retained.'))return;try{await api('DELETE',`/guarantees/${id}`);toast('Guarantee deleted','success');closeGuaranteeModal();renderGuaranteeRegister();}catch(ex){toast(ex.message,'error');}}

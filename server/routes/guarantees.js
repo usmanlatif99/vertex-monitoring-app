@@ -612,20 +612,26 @@ router.post('/:id/extensions', editAccess, async (req, res) => {
   } finally { client.release(); }
 });
 
-router.post('/:id/close', editAccess, async (req, res) => {
+router.post('/:id/close', adminAccess, async (req, res) => {
   const status = cleanText(req.body.status, 20);
   if (!['returned','encashed','cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid closing status' });
   const date = req.body.returned_date || new Date().toISOString().slice(0,10);
   if (!validDate(date)) return res.status(400).json({ error: 'Valid closing date is required' });
+  const remarks = cleanText(req.body.remarks, 5000);
+  if (!remarks) return res.status(400).json({ error: 'Closing remarks are required' });
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const old = (await client.query('SELECT * FROM bank_guarantees WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [req.params.id])).rows[0];
     if (!old) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Guarantee not found' }); }
+    if (old.lifecycle_status !== 'active') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Only an active guarantee can be closed' });
+    }
     const { rows } = await client.query(
       `UPDATE bank_guarantees SET lifecycle_status=$1, returned_date=$2, remarks=COALESCE($3,remarks), updated_by=$4, updated_at=NOW()
        WHERE id=$5 RETURNING *`,
-      [status, date, cleanText(req.body.remarks,5000), req.user.id, req.params.id]
+      [status, date, remarks, req.user.id, req.params.id]
     );
     await audit(client, old.id, status, req.user.id, old, rows[0]);
     await client.query('COMMIT');
@@ -633,6 +639,39 @@ router.post('/:id/close', editAccess, async (req, res) => {
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('[guarantee close]', e);
+    res.status(500).json({ error: 'Server error' });
+  } finally { client.release(); }
+});
+
+router.post('/:id/reopen', adminAccess, async (req, res) => {
+  const reason = cleanText(req.body.reason, 5000);
+  if (!reason) return res.status(400).json({ error: 'Reopening reason is required' });
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const old = (await client.query(
+      'SELECT * FROM bank_guarantees WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',
+      [req.params.id]
+    )).rows[0];
+    if (!old) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Guarantee not found' }); }
+    if (old.lifecycle_status === 'active') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Guarantee is already active' });
+    }
+    const { rows } = await client.query(
+      `UPDATE bank_guarantees
+       SET lifecycle_status='active', returned_date=NULL, updated_by=$1, updated_at=NOW()
+       WHERE id=$2 RETURNING *`,
+      [req.user.id, req.params.id]
+    );
+    await audit(client, old.id, 'reopened', req.user.id, old, {
+      ...rows[0], previous_status: old.lifecycle_status, reopening_reason: reason,
+    });
+    await client.query('COMMIT');
+    res.json(rows[0]);
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('[guarantee reopen]', e);
     res.status(500).json({ error: 'Server error' });
   } finally { client.release(); }
 });
