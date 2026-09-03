@@ -4180,11 +4180,14 @@ async function submitGuaranteeExtension(e,id){e.preventDefault();try{await api('
 
 async function showGuaranteeStatusForm(id){
   const r=G._guaranteeDetail?.id===id?G._guaranteeDetail:await api('GET',`/guarantees/${id}`);
+  G._guaranteeStatusRecord=r;
+  const issueDate=String(r.issue_date).slice(0,10);
   closeGuaranteeModal();
   guaranteeModal(`<div class="guar-modal-head"><div><h2>Change guarantee status</h2><div class="sub">${esc(r.guarantee_no)} · Current status: ${esc(guarStatusLabel(r.lifecycle_status))}</div></div><button class="btn btn-ghost btn-sm" onclick="closeGuaranteeModal()">Close</button></div>
     <form onsubmit="submitGuaranteeStatus(event,${r.id},'${esc(r.lifecycle_status)}')">
       <div class="fld"><label>New status *</label><select id="gs-status" required onchange="guaranteeStatusFields()"><option value="">Select status</option><option value="active">Active</option><option value="returned">Returned</option><option value="encashed">Encashed</option><option value="cancelled">Cancelled</option></select></div>
-      <div class="fld" id="gs-date-wrap"><label>Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" max="${TODAY()}" required></div>
+      <div class="guar-detail-grid"><div><span>Issue date</span><strong>${fmtFull(r.issue_date)}</strong></div><div><span>Effective expiry</span><strong>${fmtFull(r.current_expiry_date)}</strong></div></div>
+      <div class="fld" id="gs-date-wrap"><label id="gs-date-label">Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" min="${issueDate}" max="${TODAY()}" required onchange="guaranteeStatusFields()"></div>
       <div class="fld"><label id="gs-reason-label">Remarks / reason *</label><textarea id="gs-reason" rows="4" maxlength="5000" required placeholder="Explain why this status is being changed"></textarea></div>
       <div class="guar-note" id="gs-notice"><strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p></div>
       <div class="guar-form-actions"><button type="button" class="btn btn-ghost" onclick="closeGuaranteeModal()">Cancel</button><button class="btn btn-amber">Confirm status change</button></div>
@@ -4192,13 +4195,25 @@ async function showGuaranteeStatusForm(id){
 }
 
 function guaranteeStatusFields(){
-  const reopening=document.getElementById('gs-status')?.value==='active';
+  const status=document.getElementById('gs-status')?.value;
+  const reopening=status==='active';
   const dateWrap=document.getElementById('gs-date-wrap');
   const date=document.getElementById('gs-date');
+  const dateLabel=document.getElementById('gs-date-label');
   const label=document.getElementById('gs-reason-label');
+  const notice=document.getElementById('gs-notice');
   if(dateWrap)dateWrap.style.display=reopening?'none':'';
   if(date)date.required=!reopening;
   if(label)label.textContent=reopening?'Reopening reason *':'Closing remarks *';
+  const dateLabels={returned:'Return date *',encashed:'Encashment date *',cancelled:'Cancellation date *'};
+  if(dateLabel)dateLabel.textContent=dateLabels[status]||'Closing date *';
+  if(notice){
+    const expiry=String(G._guaranteeStatusRecord?.current_expiry_date||'').slice(0,10);
+    const early=status==='returned'&&date?.value&&expiry&&date.value<expiry;
+    notice.innerHTML=early
+      ? '<strong>Early return warning</strong><p>This guarantee is being returned before its effective expiry date. Confirm only if the physical guarantee has actually been returned or released by the bank.</p>'
+      : '<strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p>';
+  }
 }
 
 async function submitGuaranteeStatus(e,id,currentStatus){
@@ -4206,10 +4221,16 @@ async function submitGuaranteeStatus(e,id,currentStatus){
   const status=document.getElementById('gs-status').value;
   const reason=document.getElementById('gs-reason').value.trim();
   const closingDate=document.getElementById('gs-date').value;
+  const issueDate=String(G._guaranteeStatusRecord?.issue_date||'').slice(0,10);
+  const expiryDate=String(G._guaranteeStatusRecord?.current_expiry_date||'').slice(0,10);
   if(status===currentStatus)return toast(`Guarantee is already ${guarStatusLabel(currentStatus)}`,'error');
   if(currentStatus!=='active'&&status!=='active')return toast('Reopen the guarantee to Active before selecting another closing status','error');
+  if(status!=='active'&&closingDate<issueDate)return toast('Closing date cannot be before the guarantee issue date','error');
+  if(status!=='active'&&closingDate>TODAY())return toast('Closing date cannot be in the future','error');
   const action=status==='active'?'reopen this guarantee as Active':`close this guarantee as ${guarStatusLabel(status)}`;
-  if(!confirm(`Confirm that you want to ${action}?`))return;
+  const earlyReturn=status==='returned'&&expiryDate&&closingDate<expiryDate;
+  const warning=earlyReturn?'\n\nWarning: the return date is before the effective expiry date.':'';
+  if(!confirm(`Confirm that you want to ${action}?${warning}`))return;
   try{
     if(status==='active')await api('POST',`/guarantees/${id}/reopen`,{reason});
     else await api('POST',`/guarantees/${id}/close`,{status,returned_date:closingDate,remarks:reason});

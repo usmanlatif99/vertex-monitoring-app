@@ -85,6 +85,16 @@ function validDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
 }
 
+function todayPKT() {
+  return new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function dateOnly(value) {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
 function optionalDate(value) {
   if (value === null || value === undefined || value === '') return null;
   if (!validDate(value)) throw new Error('Invalid date in unconfirmed record');
@@ -615,8 +625,9 @@ router.post('/:id/extensions', editAccess, async (req, res) => {
 router.post('/:id/close', adminAccess, async (req, res) => {
   const status = cleanText(req.body.status, 20);
   if (!['returned','encashed','cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid closing status' });
-  const date = req.body.returned_date || new Date().toISOString().slice(0,10);
+  const date = req.body.returned_date || todayPKT();
   if (!validDate(date)) return res.status(400).json({ error: 'Valid closing date is required' });
+  if (date > todayPKT()) return res.status(400).json({ error: 'Closing date cannot be in the future' });
   const remarks = cleanText(req.body.remarks, 5000);
   if (!remarks) return res.status(400).json({ error: 'Closing remarks are required' });
   const client = await db.connect();
@@ -627,6 +638,11 @@ router.post('/:id/close', adminAccess, async (req, res) => {
     if (old.lifecycle_status !== 'active') {
       await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Only an active guarantee can be closed' });
+    }
+    const issueDate = dateOnly(old.issue_date);
+    if (issueDate && date < issueDate) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Closing date cannot be before the guarantee issue date' });
     }
     const { rows } = await client.query(
       `UPDATE bank_guarantees SET lifecycle_status=$1, returned_date=$2, remarks=COALESCE($3,remarks), updated_by=$4, updated_at=NOW()
