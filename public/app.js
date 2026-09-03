@@ -4187,7 +4187,7 @@ async function showGuaranteeStatusForm(id){
     <form onsubmit="submitGuaranteeStatus(event,${r.id},'${esc(r.lifecycle_status)}')">
       <div class="fld"><label>New status *</label><select id="gs-status" required onchange="guaranteeStatusFields()"><option value="">Select status</option><option value="active">Active</option><option value="returned">Returned</option><option value="encashed">Encashed</option><option value="cancelled">Cancelled</option></select></div>
       <div class="guar-detail-grid"><div><span>Issue date</span><strong>${fmtFull(r.issue_date)}</strong></div><div><span>Effective expiry</span><strong>${fmtFull(r.current_expiry_date)}</strong></div></div>
-      <div class="fld" id="gs-date-wrap"><label id="gs-date-label">Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" min="${issueDate}" max="${TODAY()}" required onchange="guaranteeStatusFields()"></div>
+      <div class="fld" id="gs-date-wrap" style="display:none"><label id="gs-date-label">Closing date *</label><input id="gs-date" type="date" value="${TODAY()}" min="${issueDate}" max="${TODAY()}" onchange="guaranteeStatusFields()"></div>
       <div class="fld"><label id="gs-reason-label">Remarks / reason *</label><textarea id="gs-reason" rows="4" maxlength="5000" required placeholder="Explain why this status is being changed"></textarea></div>
       <div class="guar-note" id="gs-notice"><strong>Select the intended status deliberately.</strong><p>Expired is calculated automatically from the effective expiry date and cannot be selected manually.</p></div>
       <div class="guar-form-actions"><button type="button" class="btn btn-ghost" onclick="closeGuaranteeModal()">Cancel</button><button class="btn btn-amber">Confirm status change</button></div>
