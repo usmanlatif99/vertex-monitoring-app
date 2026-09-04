@@ -6,7 +6,7 @@ const G = {
   tf: { search: '', status: '', priority: '', assignee: '', overdue: false, thisweek: false },
   mf: { search: '', status: '', priority: '' },
   _teamTasks: [], _myTasks: [], _archivedTasks: [], _selectedIds: new Set(), _archivedIds: new Set(), _dashFilter: null,
-  gf: { search: '', bank: '', status: '', type: '', company: '' },
+  gf: { search: '', bank: '', status: '', type: '', company: '', returned_month: '' },
   guaranteeTab: 'register', guaranteeAlertFilter: 'upcoming', guaranteeUnconfirmedState: 'unconfirmed', guaranteeDetailId: null,
 };
 
@@ -3920,7 +3920,7 @@ async function renderGuaranteeRegister(searchRequestId = null, caretPosition = n
       <div class="guar-metric"><span>Active guarantees</span><strong>${summary.active_count}</strong><small>${guarMoney(summary.active_exposure)} exposure</small></div>
       <button class="guar-metric guar-metric-alert" onclick="guaranteeOpenAlerts('upcoming')"><span>Expiring in 7 days</span><strong>${summary.expiring_count}</strong><small>Requires attention</small></button>
       <button class="guar-metric guar-metric-danger" onclick="guaranteeOpenAlerts('expired')"><span>Expired, not closed</span><strong>${summary.expired_count}</strong><small>Immediate review</small></button>
-      <div class="guar-metric"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>Returned guarantees</small></div>
+      <button class="guar-metric" onclick="guaranteeOpenReturnedMonth()"><span>Returned this month</span><strong>${summary.returned_month_count}</strong><small>View returned guarantees</small></button>
     </div>
     <div class="filter-bar guar-filter-bar">
       <div class="search-wrap">${SEARCH_ICON}<input id="guarantee-search" class="search-input" placeholder="Guarantee, beneficiary or reference…" value="${esc(G.gf.search)}" oninput="guaranteeSearchInput(this)"></div>
@@ -3930,6 +3930,7 @@ async function renderGuaranteeRegister(searchRequestId = null, caretPosition = n
       <select onchange="guaranteeFilter('type',this.value)"><option value="">All types</option>${Object.entries(GUAR_TYPE_LABEL).map(([v,l])=>`<option value="${v}" ${G.gf.type===v?'selected':''}>${l}</option>`).join('')}</select>
       <button class="btn btn-ghost btn-sm" onclick="guaranteeClearFilters()">Clear</button>
     </div>
+    ${G.gf.returned_month==='1'?`<div class="muted small" style="margin:-6px 0 14px">Showing guarantees returned during ${new Date().toLocaleDateString('en-GB',{month:'long',year:'numeric'})}.</div>`:''}
     <div class="table-wrap"><table class="guar-table">
       <thead><tr><th>Guarantee no.</th><th>Company</th><th>Bank</th><th>Beneficiary</th><th>Type</th><th>Expiry</th><th>Days</th><th class="right">Amount</th><th>Status</th></tr></thead>
       <tbody>${rows.length ? rows.map(r=>`<tr onclick="showGuaranteeDetail(${r.id})">
@@ -3960,12 +3961,18 @@ function guaranteeSearchInput(input) {
 
 function guaranteeFilter(key, value) {
   G.gf[key] = value;
+  if (key === 'status' && value !== 'returned') G.gf.returned_month = '';
   clearTimeout(G._guarFilterTimer);
   G._guarFilterTimer = setTimeout(renderGuaranteeRegister, key === 'search' ? 300 : 0);
 }
 
+function guaranteeOpenReturnedMonth() {
+  G.gf = { search:'', bank:'', status:'returned', type:'', company:'', returned_month:'1' };
+  renderGuaranteeRegister();
+}
+
 function guaranteeClearFilters() {
-  G.gf = { search:'', bank:'', status:'', type:'', company:'' };
+  G.gf = { search:'', bank:'', status:'', type:'', company:'', returned_month:'' };
   renderGuaranteeRegister();
 }
 

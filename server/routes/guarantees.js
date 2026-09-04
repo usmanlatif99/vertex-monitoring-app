@@ -238,7 +238,7 @@ router.get('/summary', viewAccess, async (_req, res) => {
         COUNT(*) FILTER (WHERE lifecycle_status='active')::int AS active_count,
         COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7)::int AS expiring_count,
         COUNT(*) FILTER (WHERE lifecycle_status='active' AND current_expiry_date < CURRENT_DATE)::int AS expired_count,
-        COUNT(*) FILTER (WHERE lifecycle_status='returned' AND date_trunc('month', returned_date)=date_trunc('month', CURRENT_DATE))::int AS returned_month_count,
+        COUNT(*) FILTER (WHERE lifecycle_status='returned' AND date_trunc('month', returned_date)=date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Karachi')::date))::int AS returned_month_count,
         COALESCE(SUM(amount) FILTER (WHERE lifecycle_status='active'),0) AS active_exposure
       FROM bank_guarantees WHERE deleted_at IS NULL`);
     res.json(rows[0]);
@@ -479,6 +479,9 @@ router.get('/', viewAccess, async (req, res) => {
   if (req.query.bank) add('g.issuing_bank = ?', req.query.bank);
   if (req.query.company) add('g.company = ?', req.query.company);
   if (req.query.type) add('g.guarantee_type = ?', req.query.type);
+  if (req.query.returned_month === '1') {
+    where.push(`g.lifecycle_status = 'returned' AND date_trunc('month', g.returned_date) = date_trunc('month', (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Karachi')::date)`);
+  }
   if (req.query.status) {
     params.push(req.query.status);
     where.push(`${computedStatusSql('g')} = $${params.length}`);
